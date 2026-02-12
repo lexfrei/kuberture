@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo.png" alt="kuberture logo" width="300">
+</p>
+
 # kuberture
 
 Kubernetes controller that translates EndpointSlice resources into headless Services annotated for [external-dns](https://github.com/kubernetes-sigs/external-dns) consumption.
