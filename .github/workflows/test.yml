@@ -1,0 +1,26 @@
+name: Tests
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  test:
+    name: Run on Ubuntu
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone the code
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Check go.mod tidiness
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: Running Tests
+        run: make test

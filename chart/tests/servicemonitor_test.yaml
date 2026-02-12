@@ -1,0 +1,75 @@
+suite: ServiceMonitor tests
+templates:
+  - templates/servicemonitor.yaml
+release:
+  name: kuberture
+  namespace: default
+tests:
+  - it: should not be rendered by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should be rendered when enabled
+    set:
+      serviceMonitor.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ServiceMonitor
+      - isAPIVersion:
+          of: monitoring.coreos.com/v1
+
+  - it: should have correct default interval and scrapeTimeout
+    set:
+      serviceMonitor.enabled: true
+    asserts:
+      - equal:
+          path: spec.endpoints[0].interval
+          value: 30s
+      - equal:
+          path: spec.endpoints[0].scrapeTimeout
+          value: 10s
+
+  - it: should use custom interval and scrapeTimeout
+    set:
+      serviceMonitor.enabled: true
+      serviceMonitor.interval: 60s
+      serviceMonitor.scrapeTimeout: 15s
+    asserts:
+      - equal:
+          path: spec.endpoints[0].interval
+          value: 60s
+      - equal:
+          path: spec.endpoints[0].scrapeTimeout
+          value: 15s
+
+  - it: should have correct selector labels
+    set:
+      serviceMonitor.enabled: true
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: kuberture
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/instance"]
+          value: kuberture
+
+  - it: should scrape the metrics port
+    set:
+      serviceMonitor.enabled: true
+    asserts:
+      - equal:
+          path: spec.endpoints[0].port
+          value: metrics
+
+  - it: should include additional labels when specified
+    set:
+      serviceMonitor.enabled: true
+      serviceMonitor.additionalLabels:
+        prometheus: kube-prometheus
+    asserts:
+      - equal:
+          path: metadata.labels.prometheus
+          value: kube-prometheus

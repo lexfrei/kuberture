@@ -1,0 +1,61 @@
+suite: ConfigMap tests
+templates:
+  - templates/configmap.yaml
+release:
+  name: kuberture
+  namespace: default
+tests:
+  - it: should be a ConfigMap with correct apiVersion
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - isAPIVersion:
+          of: v1
+
+  - it: should contain config.yaml key
+    asserts:
+      - isNotNull:
+          path: data["config.yaml"]
+
+  - it: should have default config content
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "source:"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "namespace: default"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "serviceName: kubernetes"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "metricsBindAddress: :8080"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "healthProbeBindAddress: :8081"
+
+  - it: should reflect custom config values
+    set:
+      config:
+        source:
+          namespace: kube-system
+          serviceName: my-service
+        outputs:
+          - type: dns
+            zone: example.com
+        metricsBindAddress: ":9090"
+        healthProbeBindAddress: ":9091"
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "namespace: kube-system"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "serviceName: my-service"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "zone: example.com"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "metricsBindAddress: :9090"

@@ -1,0 +1,12 @@
+apiVersion: v2
+name: kuberture
+description: Kubernetes EndpointSlice to DNS controller for external-dns
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+maintainers:
+  - name: Aleksei Sviridkin
+    email: f@lex.la
+home: https://github.com/lexfrei/kuberture
+sources:
+  - https://github.com/lexfrei/kuberture

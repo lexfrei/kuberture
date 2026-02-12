@@ -1,0 +1,13 @@
+# Build artifacts
+bin/
+/kuberture
+coverage.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store

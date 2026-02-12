@@ -1,0 +1,175 @@
+suite: deployment tests
+templates:
+  - templates/deployment.yaml
+  - templates/configmap.yaml
+release:
+  name: kuberture
+  namespace: default
+chart:
+  version: 0.1.0
+  appVersion: "0.1.0"
+tests:
+  - it: should be a Deployment with correct apiVersion
+    template: templates/deployment.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - isAPIVersion:
+          of: apps/v1
+
+  - it: should use image tag from appVersion when tag is not set
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "ghcr.io/lexfrei/kuberture:0.1.0"
+
+  - it: should use image tag from values when explicitly set
+    template: templates/deployment.yaml
+    set:
+      image.tag: "v1.2.3"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "ghcr.io/lexfrei/kuberture:v1.2.3"
+
+  - it: should have correct args
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value:
+            - "--config"
+            - "/etc/kuberture/config.yaml"
+
+  - it: should have liveness probe on /healthz
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /healthz
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.port
+          value: health
+
+  - it: should have readiness probe on /readyz
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /readyz
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
+          value: health
+
+  - it: should have pod-level securityContext with runAsNonRoot
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+
+  - it: should have container-level security context
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          value:
+            - ALL
+
+  - it: should have resource limits and requests
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 10m
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 32Mi
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 64Mi
+
+  - it: should mount configmap volume
+    template: templates/deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: config
+            mountPath: /etc/kuberture/config.yaml
+            subPath: config.yaml
+            readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: config
+            configMap:
+              name: kuberture
+
+  - it: should render custom podAnnotations
+    template: templates/deployment.yaml
+    set:
+      podAnnotations:
+        custom-annotation: custom-value
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations.custom-annotation
+          value: custom-value
+
+  - it: should render custom podLabels
+    template: templates/deployment.yaml
+    set:
+      podLabels:
+        custom-label: custom-value
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels.custom-label
+          value: custom-value
+
+  - it: should always have checksum/config annotation
+    template: templates/deployment.yaml
+    asserts:
+      - isNotNull:
+          path: spec.template.metadata.annotations["checksum/config"]
+
+  - it: should set correct replica count
+    template: templates/deployment.yaml
+    set:
+      replicaCount: 3
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+
+  - it: should use correct imagePullPolicy
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: IfNotPresent
+
+  - it: should have metrics and health ports
+    template: templates/deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: metrics
+            containerPort: 8080
+            protocol: TCP
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: health
+            containerPort: 8081
+            protocol: TCP

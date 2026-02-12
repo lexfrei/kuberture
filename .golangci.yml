@@ -1,0 +1,204 @@
+version: "2"
+
+run:
+  allow-parallel-runners: true
+
+linters:
+  default: all
+  disable:
+    - depguard
+    - exhaustruct
+    - gochecknoinits
+    - wsl
+    - lll
+    - errchkjson
+    - ireturn
+    - gomoddirectives
+  settings:
+    tagliatelle:
+      case:
+        use-field-name: true
+        extended-rules:
+          json:
+            case: camel
+            extra-initialisms: true
+            initialism-overrides:
+              ID: true
+              URL: true
+              CPU: true
+              IP: true
+              OS: true
+              API: true
+              UUID: true
+              MAC: true
+              UID: true
+              GID: true
+              DNS: true
+    dupl:
+      threshold: 100
+    goconst:
+      min-len: 2
+      min-occurrences: 2
+    gocritic:
+      disabled-checks:
+        - dupImport
+        - unnamedResult
+      enabled-tags:
+        - diagnostic
+        - experimental
+        - opinionated
+        - performance
+        - style
+    funlen:
+      lines: 60
+      statements: 60
+    gocyclo:
+      min-complexity: 15
+    cyclop:
+      max-complexity: 15
+    mnd:
+      ignored-numbers:
+        - "2"
+        - "10"
+        - "60"
+        - "64"
+        - "100"
+        - "500"
+        - "1000"
+    godot:
+      exclude:
+        - "^ ?\\+kubebuilder:"
+        - "^ ?\\+optional"
+    wrapcheck:
+      ignore-sig-regexps:
+        - '\.Newf\('
+      ignore-package-globs:
+        - github.com/cockroachdb/errors
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+      allow-unused: false
+    varnamelen:
+      max-distance: 5
+      min-name-length: 3
+      check-receiver: false
+      check-return: false
+      ignore-type-assert-ok: false
+      ignore-map-index-ok: false
+      ignore-chan-recv-ok: false
+      ignore-decls:
+        - wg sync.WaitGroup
+        - wg *sync.WaitGroup
+        - mu sync.Mutex
+        - ok bool
+      ignore-names:
+        - i
+        - w
+        - r
+        - b
+        - c
+        - m
+        - n
+        - tt
+        - rw
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples/
+      - generated\.go$
+    rules:
+      # Test files: relax many linters
+      - linters:
+          - funlen
+          - dupl
+          - gocognit
+          - gocyclo
+          - cyclop
+          - errcheck
+          - testableexamples
+          - testpackage
+          - forcetypeassert
+          - gocritic
+          - nlreturn
+          - wsl_v5
+          - varnamelen
+          - unparam
+          - modernize
+          - gosec
+          - testifylint
+          - perfsprint
+          - paralleltest
+          - maintidx
+          - godox
+          - revive
+          - gochecknoglobals
+          - noinlineerr
+        path: _test\.go
+      # Test utilities
+      - linters:
+          - err113
+          - fatcontext
+          - forbidigo
+          - forcetypeassert
+          - goconst
+          - nolintlint
+          - prealloc
+          - unconvert
+          - varnamelen
+          - wsl_v5
+          - noctx
+          - noinlineerr
+          - gosec
+          - mnd
+          - gocritic
+          - maintidx
+          - intrange
+          - staticcheck
+          - wrapcheck
+          - revive
+        path: test/
+      # cmd/ entry points
+      - linters:
+          - gochecknoglobals
+          - gocognit
+          - funlen
+          - gocyclo
+          - cyclop
+          - maintidx
+          - noinlineerr
+          - mnd
+        path: cmd/
+      # Generated code patterns
+      - linters:
+          - gochecknoglobals
+          - revive
+          - gocritic
+          - varnamelen
+          - godot
+          - mnd
+          - funlen
+          - gocognit
+          - gocyclo
+          - cyclop
+          - maintidx
+        path: zz_generated
+
+formatters:
+  enable:
+    - gofmt
+    - gofumpt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples/
+      - generated\.go$

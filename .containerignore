@@ -1,0 +1,6 @@
+.git/
+chart/
+*.md
+LICENSE
+.golangci.yml
+.github/

@@ -1,0 +1,96 @@
+suite: RBAC tests
+templates:
+  - templates/clusterrole.yaml
+  - templates/clusterrolebinding.yaml
+release:
+  name: kuberture
+  namespace: default
+tests:
+  - it: ClusterRole should have correct kind and apiVersion
+    template: templates/clusterrole.yaml
+    asserts:
+      - isKind:
+          of: ClusterRole
+      - isAPIVersion:
+          of: rbac.authorization.k8s.io/v1
+
+  - it: ClusterRole should have endpointslices rule
+    template: templates/clusterrole.yaml
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["discovery.k8s.io"]
+            resources: ["endpointslices"]
+            verbs: ["get", "list", "watch"]
+
+  - it: ClusterRole should have nodes rule
+    template: templates/clusterrole.yaml
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: [""]
+            resources: ["nodes"]
+            verbs: ["get", "list", "watch"]
+
+  - it: ClusterRole should have services rule
+    template: templates/clusterrole.yaml
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: [""]
+            resources: ["services"]
+            verbs: ["get", "list", "watch", "create", "update", "patch"]
+
+  - it: ClusterRole should have leases rule
+    template: templates/clusterrole.yaml
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["coordination.k8s.io"]
+            resources: ["leases"]
+            verbs: ["get", "list", "watch", "create", "update", "patch"]
+
+  - it: ClusterRole should have events rule
+    template: templates/clusterrole.yaml
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: [""]
+            resources: ["events"]
+            verbs: ["create", "patch"]
+
+  - it: ClusterRoleBinding should have correct kind and apiVersion
+    template: templates/clusterrolebinding.yaml
+    asserts:
+      - isKind:
+          of: ClusterRoleBinding
+      - isAPIVersion:
+          of: rbac.authorization.k8s.io/v1
+
+  - it: ClusterRoleBinding should reference correct ClusterRole
+    template: templates/clusterrolebinding.yaml
+    asserts:
+      - equal:
+          path: roleRef.apiGroup
+          value: rbac.authorization.k8s.io
+      - equal:
+          path: roleRef.kind
+          value: ClusterRole
+      - equal:
+          path: roleRef.name
+          value: kuberture
+
+  - it: ClusterRoleBinding should reference correct ServiceAccount
+    template: templates/clusterrolebinding.yaml
+    asserts:
+      - contains:
+          path: subjects
+          content:
+            kind: ServiceAccount
+            name: kuberture
+            namespace: default

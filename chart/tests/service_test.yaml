@@ -1,0 +1,51 @@
+suite: Service tests
+templates:
+  - templates/service.yaml
+release:
+  name: kuberture
+  namespace: default
+tests:
+  - it: should be a Service with correct apiVersion
+    asserts:
+      - isKind:
+          of: Service
+      - isAPIVersion:
+          of: v1
+
+  - it: should have correct default port 8080
+    asserts:
+      - equal:
+          path: spec.ports[0].port
+          value: 8080
+      - equal:
+          path: spec.ports[0].targetPort
+          value: metrics
+      - equal:
+          path: spec.ports[0].protocol
+          value: TCP
+      - equal:
+          path: spec.ports[0].name
+          value: metrics
+
+  - it: should have ClusterIP type by default
+    asserts:
+      - equal:
+          path: spec.type
+          value: ClusterIP
+
+  - it: should have correct selector labels
+    asserts:
+      - equal:
+          path: spec.selector["app.kubernetes.io/name"]
+          value: kuberture
+      - equal:
+          path: spec.selector["app.kubernetes.io/instance"]
+          value: kuberture
+
+  - it: should allow custom port
+    set:
+      service.port: 9090
+    asserts:
+      - equal:
+          path: spec.ports[0].port
+          value: 9090
