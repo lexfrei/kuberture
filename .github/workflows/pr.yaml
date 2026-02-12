@@ -89,10 +89,10 @@ jobs:
       - name: Run E2E tests
         run: make e2e
 
-  # Build containers only after lint and test succeed
+  # Build containers only after lint, test, and e2e succeed
   build-and-push:
     name: Build and Push (${{ matrix.arch }})
-    needs: [lint, test]
+    needs: [lint, test, e2e]
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -239,7 +239,7 @@ jobs:
   build-chart:
     name: Build Chart
     runs-on: ubuntu-latest
-    needs: [lint, test, lint-chart]
+    needs: [lint, test, e2e, lint-chart]
     steps:
       - name: Checkout PR code
         uses: actions/checkout@v6
