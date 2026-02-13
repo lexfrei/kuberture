@@ -762,6 +762,30 @@ func TestReadyzCheck_NonLeaderPodIsReady(t *testing.T) {
 	}
 }
 
+// TestReadyzCheck_ElectedLeaderBehavesNormally verifies that an elected leader
+// (closed elected channel) still requires successful reconciliation.
+func TestReadyzCheck_ElectedLeaderBehavesNormally(t *testing.T) {
+	output := defaultOutput()
+	cfgPtr := newTestConfig([]config.OutputConfig{output})
+
+	rec := buildTestReconciler(t, nil, cfgPtr, &[]appliedService{}, nil)
+
+	// Simulate leader: elected channel is closed.
+	ch := make(chan struct{})
+	close(ch)
+	rec.elected = ch
+
+	// Leader that hasn't reconciled should be unhealthy.
+	err := rec.ReadyzCheck(&http.Request{})
+	if err == nil {
+		t.Fatal("elected leader without reconciliation should return error")
+	}
+
+	if !strings.Contains(err.Error(), "initial reconciliation") {
+		t.Errorf("error = %q, want it to contain %q", err.Error(), "initial reconciliation")
+	}
+}
+
 func TestReadyzCheck_BecomesUnhealthyAfterStaleTimeout(t *testing.T) {
 	eps := makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 		{
