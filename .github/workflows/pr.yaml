@@ -255,6 +255,12 @@ jobs:
             --set 'config.outputs[0].hostname[0]=test.example.com' \
             --set 'config.outputs[0].serviceName=tmpl-svc'
 
+      - name: Install helm-unittest plugin
+        run: helm plugin install https://github.com/helm-unittest/helm-unittest.git
+
+      - name: Run Helm unit tests
+        run: helm unittest chart/
+
   # Build and push Helm chart to ttl.sh
   build-chart:
     name: Build Chart
