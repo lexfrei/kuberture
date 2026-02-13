@@ -1,0 +1,34 @@
+suite: networkpolicy tests
+templates:
+  - templates/networkpolicy.yaml
+release:
+  name: kuberture
+  namespace: default
+chart:
+  version: 0.1.0
+  appVersion: "0.1.0"
+values:
+  - test-values.yaml
+tests:
+  - it: should not create NetworkPolicy by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should create NetworkPolicy when enabled
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - isKind:
+          of: NetworkPolicy
+      - isAPIVersion:
+          of: networking.k8s.io/v1
+      - equal:
+          path: spec.podSelector.matchLabels["app.kubernetes.io/name"]
+          value: kuberture
+      - contains:
+          path: spec.policyTypes
+          content: Ingress
+      - contains:
+          path: spec.policyTypes
+          content: Egress
