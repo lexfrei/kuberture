@@ -29,7 +29,7 @@ jobs:
           cache: true
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
           version: v2.9.0
           args: --timeout=5m
@@ -152,7 +152,7 @@ jobs:
           touch "/tmp/digests/${digest#sha256:}"
 
       - name: Upload digest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: digests-${{ matrix.arch }}
           path: /tmp/digests/*
@@ -166,7 +166,7 @@ jobs:
     needs: build-and-push
     steps:
       - name: Download digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           pattern: digests-*
           path: /tmp/digests
@@ -341,7 +341,7 @@ jobs:
     steps:
       - name: Check if first build
         id: first_build
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           result-encoding: string
           script: |
@@ -356,7 +356,7 @@ jobs:
 
       - name: Add Container Available label
         if: steps.first_build.outputs.result == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             github.rest.issues.addLabels({
@@ -368,7 +368,7 @@ jobs:
 
       - name: Comment on PR (first time only)
         if: steps.first_build.outputs.result == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const prNumber = context.payload.pull_request.number;
