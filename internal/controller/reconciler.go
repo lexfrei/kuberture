@@ -58,6 +58,7 @@ type Reconciler struct {
 	namespace    string
 	ownerRef     *metav1.OwnerReference
 	reloadCh     <-chan struct{}
+	elected      <-chan struct{} // closed when this instance wins leader election
 
 	mu          sync.Mutex
 	lastSuccess time.Time
@@ -66,6 +67,8 @@ type Reconciler struct {
 // NewReconciler creates a Reconciler with the given dependencies.
 // ownerRef may be nil when the owner Deployment cannot be resolved (e.g. dev mode).
 // reloadCh may be nil if config hot-reload triggering is not needed.
+// elected is closed when the manager wins leader election; pass a closed channel
+// to disable leader-awareness (e.g. when leader election is off).
 func NewReconciler(
 	cli client.Client,
 	res *resolver.Resolver,
@@ -75,6 +78,7 @@ func NewReconciler(
 	namespace string,
 	ownerRef *metav1.OwnerReference,
 	reloadCh <-chan struct{},
+	elected <-chan struct{},
 ) *Reconciler {
 	return &Reconciler{
 		client:       cli,
@@ -85,6 +89,7 @@ func NewReconciler(
 		namespace:    namespace,
 		ownerRef:     ownerRef,
 		reloadCh:     reloadCh,
+		elected:      elected,
 	}
 }
 
@@ -176,9 +181,18 @@ func (rec *Reconciler) Reconcile(ctx context.Context, _ ctrl.Request) (ctrl.Resu
 	return ctrl.Result{RequeueAfter: requeueInterval}, nil
 }
 
-// ReadyzCheck reports whether the controller has completed at least one
-// successful reconciliation and has not become stale.
+// ReadyzCheck reports whether the controller is healthy.
+//
+// Non-leader pods (waiting for leader election) always report healthy because
+// they are valid standby replicas that the PDB must count as available.
+//
+// Leader pods must complete at least one reconciliation and must not become
+// stale (no successful reconciliation within stalenessThreshold).
 func (rec *Reconciler) ReadyzCheck(_ *http.Request) error {
+	if !rec.isElected() {
+		return nil
+	}
+
 	rec.mu.Lock()
 	defer rec.mu.Unlock()
 
@@ -193,6 +207,20 @@ func (rec *Reconciler) ReadyzCheck(_ *http.Request) error {
 	}
 
 	return nil
+}
+
+// isElected reports whether this instance has won leader election.
+func (rec *Reconciler) isElected() bool {
+	if rec.elected == nil {
+		return true
+	}
+
+	select {
+	case <-rec.elected:
+		return true
+	default:
+		return false
+	}
 }
 
 // listEndpointSlices fetches all EndpointSlices matching the source config.

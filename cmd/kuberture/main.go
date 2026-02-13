@@ -138,6 +138,7 @@ func run() error {
 		podNamespace,
 		ownerRef,
 		watcher.ReloadChannel(),
+		mgr.Elected(),
 	)
 
 	err = reconciler.SetupWithManager(mgr)
