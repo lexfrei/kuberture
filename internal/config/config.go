@@ -257,7 +257,7 @@ func applyOutputDefaults(cfg *Config) {
 // isValidLogLevel reports whether the given level is a supported slog level.
 func isValidLogLevel(level string) bool {
 	switch level {
-	case logLevelDebug, defaultLogLevel, logLevelWarn, logLevelError:
+	case logLevelDebug, logLevelInfo, logLevelWarn, logLevelError:
 		return true
 	default:
 		return false

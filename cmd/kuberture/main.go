@@ -155,6 +155,8 @@ func run() error {
 		return errors.Wrap(err, "adding readyz check")
 	}
 
+	defer watcherCancel()
+
 	watcherErrCh := make(chan error, 1)
 
 	go func() {

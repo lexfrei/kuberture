@@ -61,6 +61,7 @@ func NewWatcher(
 
 // SetLogLevelVar sets the slog.LevelVar that will be updated when
 // the config logLevel changes during a hot-reload.
+// Must be called before Run() starts; not safe for concurrent use.
 func (w *Watcher) SetLogLevelVar(lv *slog.LevelVar) {
 	w.logLevelVar = lv
 }
