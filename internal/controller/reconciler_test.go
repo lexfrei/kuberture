@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -747,6 +748,110 @@ func TestReadyzCheck(t *testing.T) {
 	}
 }
 
+func TestReadyzCheck_BecomesUnhealthyAfterStaleTimeout(t *testing.T) {
+	eps := makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
+		{
+			Addresses:  []string{testAddr1},
+			Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+		},
+	})
+
+	output := defaultOutput()
+	cfgPtr := newTestConfig([]config.OutputConfig{output})
+
+	applyFn := func(
+		_ context.Context,
+		_ client.WithWatch,
+		_ runtime.ApplyConfiguration,
+		_ ...client.ApplyOption,
+	) error {
+		return nil
+	}
+
+	rec := buildTestReconcilerWithInterceptor(
+		t,
+		[]client.Object{eps},
+		cfgPtr,
+		interceptor.Funcs{Apply: applyFn},
+	)
+
+	// Successful reconcile.
+	_, err := rec.Reconcile(context.Background(), ctrl.Request{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should be healthy right after.
+	if checkErr := rec.ReadyzCheck(&http.Request{}); checkErr != nil {
+		t.Fatalf("expected healthy after success, got: %v", checkErr)
+	}
+
+	// Simulate staleness by backdating lastSuccess.
+	rec.mu.Lock()
+	rec.lastSuccess = time.Now().Add(-stalenessThreshold - time.Minute)
+	rec.mu.Unlock()
+
+	checkErr := rec.ReadyzCheck(&http.Request{})
+	if checkErr == nil {
+		t.Fatal("expected unhealthy after stale timeout, got nil")
+	}
+
+	if !strings.Contains(checkErr.Error(), "stale") {
+		t.Errorf("error = %q, want it to contain %q", checkErr.Error(), "stale")
+	}
+}
+
+func TestReadyzCheck_RecoverAfterError(t *testing.T) {
+	eps := makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
+		{
+			Addresses:  []string{testAddr1},
+			Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+		},
+	})
+
+	output := defaultOutput()
+	cfgPtr := newTestConfig([]config.OutputConfig{output})
+
+	failOnce := true
+
+	applyFn := func(
+		_ context.Context,
+		_ client.WithWatch,
+		_ runtime.ApplyConfiguration,
+		_ ...client.ApplyOption,
+	) error {
+		if failOnce {
+			failOnce = false
+			return errors.New("simulated failure")
+		}
+		return nil
+	}
+
+	rec := buildTestReconcilerWithInterceptor(
+		t,
+		[]client.Object{eps},
+		cfgPtr,
+		interceptor.Funcs{Apply: applyFn},
+	)
+
+	// First reconcile fails.
+	_, err := rec.Reconcile(context.Background(), ctrl.Request{})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	// Second reconcile succeeds.
+	_, err = rec.Reconcile(context.Background(), ctrl.Request{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should be healthy after recovery.
+	if checkErr := rec.ReadyzCheck(&http.Request{}); checkErr != nil {
+		t.Fatalf("expected healthy after recovery, got: %v", checkErr)
+	}
+}
+
 func TestBuildService(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -946,7 +1051,7 @@ func TestNewReconciler(t *testing.T) {
 		t.Errorf("namespace = %q, want %q", rec.namespace, testSvcNamespace)
 	}
 
-	if rec.ready {
+	if !rec.lastSuccess.IsZero() {
 		t.Error("reconciler should not be ready initially")
 	}
 }
@@ -1385,7 +1490,7 @@ func TestReconcile_SuccessSetsMetrics(t *testing.T) {
 		}
 
 		rec.mu.Lock()
-		ready := rec.ready
+		ready := !rec.lastSuccess.IsZero()
 		rec.mu.Unlock()
 
 		if !ready {

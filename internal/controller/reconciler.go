@@ -37,6 +37,10 @@ const (
 	managedByLabel = "app.kubernetes.io/managed-by"
 	managedByValue = "kuberture"
 	instanceLabel  = "kuberture/instance"
+
+	// stalenessThreshold is how long since the last successful reconciliation
+	// before the readiness check reports unhealthy.
+	stalenessThreshold = 5 * time.Minute
 )
 
 // Reconciler watches EndpointSlice and Node resources and maintains headless
@@ -51,8 +55,8 @@ type Reconciler struct {
 	ownerRef     *metav1.OwnerReference
 	reloadCh     <-chan struct{}
 
-	mu    sync.Mutex
-	ready bool
+	mu          sync.Mutex
+	lastSuccess time.Time
 }
 
 // NewReconciler creates a Reconciler with the given dependencies.
@@ -159,13 +163,18 @@ func (rec *Reconciler) Reconcile(ctx context.Context, _ ctrl.Request) (ctrl.Resu
 }
 
 // ReadyzCheck reports whether the controller has completed at least one
-// successful reconciliation.
+// successful reconciliation and has not become stale.
 func (rec *Reconciler) ReadyzCheck(_ *http.Request) error {
 	rec.mu.Lock()
 	defer rec.mu.Unlock()
 
-	if !rec.ready {
+	if rec.lastSuccess.IsZero() {
 		return errNotReconciled
+	}
+
+	if time.Since(rec.lastSuccess) > stalenessThreshold {
+		return errors.Newf("last successful reconciliation was %s ago (stale threshold: %s)",
+			time.Since(rec.lastSuccess).Round(time.Second), stalenessThreshold)
 	}
 
 	return nil
@@ -337,10 +346,10 @@ func (rec *Reconciler) cleanupStaleServices(ctx context.Context, cfg *config.Con
 	return errors.Join(errs...)
 }
 
-// markReady records that at least one reconciliation has succeeded.
+// markReady records that a reconciliation has succeeded.
 func (rec *Reconciler) markReady() {
 	rec.mu.Lock()
 	defer rec.mu.Unlock()
 
-	rec.ready = true
+	rec.lastSuccess = time.Now()
 }
