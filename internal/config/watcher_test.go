@@ -32,6 +32,15 @@ outputs:
     serviceName: updated-svc
 `
 
+	debugLevelYAML = `
+logLevel: debug
+outputs:
+  - name: test
+    hostname:
+      - test.example.com
+    serviceName: test-svc
+`
+
 	invalidYAML = `{{{not yaml at all`
 
 	outputNameTest    = "test"
@@ -724,6 +733,55 @@ func TestReload_LogsOutputChanges(t *testing.T) {
 	cancel()
 }
 
+func TestReload_UpdatesLogLevelVar(t *testing.T) {
+	path := writeTestConfig(t, validYAML)
+	initial := loadInitialConfig(t, path)
+	log := newTestLogger()
+
+	watcher, err := NewWatcher(path, initial, log, noopCancel)
+	if err != nil {
+		t.Fatalf("unexpected error creating watcher: %v", err)
+	}
+
+	defer watcher.Close()
+
+	logLevelVar := &slog.LevelVar{}
+	logLevelVar.Set(slog.LevelInfo)
+	watcher.SetLogLevelVar(logLevelVar)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		_ = watcher.Run(ctx)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+
+	writeErr := os.WriteFile(path, []byte(debugLevelYAML), 0o600)
+	if writeErr != nil {
+		t.Fatalf("writing config with debug level: %v", writeErr)
+	}
+
+	deadline := time.After(2 * time.Second)
+	ticker := time.NewTicker(50 * time.Millisecond)
+
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-deadline:
+			t.Fatalf("timed out waiting for log level update; current level = %v", logLevelVar.Level())
+		case <-ticker.C:
+			if logLevelVar.Level() == slog.LevelDebug {
+				cancel()
+
+				return
+			}
+		}
+	}
+}
+
 func TestReload_LogsLogLevelChange(t *testing.T) {
 	path := writeTestConfig(t, validYAML)
 	initial := loadInitialConfig(t, path)
@@ -747,15 +805,7 @@ func TestReload_LogsLogLevelChange(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	debugYAML := `
-logLevel: debug
-outputs:
-  - name: test
-    hostname:
-      - test.example.com
-    serviceName: test-svc
-`
-	writeErr := os.WriteFile(path, []byte(debugYAML), 0o600)
+	writeErr := os.WriteFile(path, []byte(debugLevelYAML), 0o600)
 	if writeErr != nil {
 		t.Fatalf("writing config with debug level: %v", writeErr)
 	}

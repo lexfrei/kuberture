@@ -13,12 +13,13 @@ import (
 
 // Watcher monitors a config file for changes and reloads it atomically.
 type Watcher struct {
-	path       string
-	config     *atomic.Pointer[Config]
-	log        *slog.Logger
-	fsWatcher  *fsnotify.Watcher
-	cancelFunc context.CancelFunc // called when a restart-requiring change is detected
-	reloadCh   chan struct{}      // signals successful config reloads
+	path        string
+	config      *atomic.Pointer[Config]
+	log         *slog.Logger
+	fsWatcher   *fsnotify.Watcher
+	cancelFunc  context.CancelFunc // called when a restart-requiring change is detected
+	reloadCh    chan struct{}      // signals successful config reloads
+	logLevelVar *slog.LevelVar     // optional; updated on reload when logLevel changes
 }
 
 // NewWatcher creates a config file watcher with the given initial config.
@@ -56,6 +57,12 @@ func NewWatcher(
 		cancelFunc: cancelFunc,
 		reloadCh:   make(chan struct{}, 1),
 	}, nil
+}
+
+// SetLogLevelVar sets the slog.LevelVar that will be updated when
+// the config logLevel changes during a hot-reload.
+func (w *Watcher) SetLogLevelVar(lv *slog.LevelVar) {
+	w.logLevelVar = lv
 }
 
 // Config returns the current configuration via atomic load.
@@ -185,6 +192,20 @@ func (w *Watcher) logConfigDiff(old, updated *Config) {
 	}
 }
 
+// parseSlogLevel maps a config log level string to the corresponding slog.Level.
+func parseSlogLevel(level string) slog.Level {
+	switch level {
+	case logLevelDebug:
+		return slog.LevelDebug
+	case logLevelWarn:
+		return slog.LevelWarn
+	case logLevelError:
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
+}
+
 func isReloadEvent(evt fsnotify.Event) bool {
 	return evt.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove) != 0
 }
@@ -214,6 +235,11 @@ func (w *Watcher) reload() {
 	configReloadTotal.WithLabelValues("success").Inc()
 	w.logConfigDiff(old, cfg)
 	w.config.Store(cfg)
+
+	if w.logLevelVar != nil && old.LogLevel != cfg.LogLevel {
+		w.logLevelVar.Set(parseSlogLevel(cfg.LogLevel))
+	}
+
 	w.log.Info("config reloaded successfully", slog.String("path", w.path))
 
 	// Signal controllers to reconcile with the new config.

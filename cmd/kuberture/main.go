@@ -121,6 +121,8 @@ func run() error {
 		return errors.Wrap(err, "creating config watcher")
 	}
 
+	watcher.SetLogLevelVar(logLevel)
+
 	defer func() {
 		if closeErr := watcher.Close(); closeErr != nil {
 			logger.Error("closing config watcher", slog.String("error", closeErr.Error()))

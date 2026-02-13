@@ -34,7 +34,11 @@ const (
 	defaultRecordTTL        = 60
 	defaultAddressSource    = AddressSourceEndpointSlice
 	defaultAddressType      = AddressTypeIPv4
-	defaultLogLevel         = "info"
+	defaultLogLevel         = logLevelInfo
+	logLevelDebug           = "debug"
+	logLevelInfo            = "info"
+	logLevelWarn            = "warn"
+	logLevelError           = "error"
 	debounceDuration        = 100 * time.Millisecond
 )
 
@@ -253,7 +257,7 @@ func applyOutputDefaults(cfg *Config) {
 // isValidLogLevel reports whether the given level is a supported slog level.
 func isValidLogLevel(level string) bool {
 	switch level {
-	case "debug", defaultLogLevel, "warn", "error":
+	case logLevelDebug, defaultLogLevel, logLevelWarn, logLevelError:
 		return true
 	default:
 		return false
