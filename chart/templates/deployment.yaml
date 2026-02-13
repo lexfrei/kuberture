@@ -67,6 +67,12 @@ spec:
             httpGet:
               path: /readyz
               port: health
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            failureThreshold: 30
+            periodSeconds: 2
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           securityContext:
