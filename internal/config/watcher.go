@@ -144,6 +144,47 @@ func restartReason(old, updated *Config) string {
 	return ""
 }
 
+// logConfigDiff logs the differences between old and new configuration.
+func (w *Watcher) logConfigDiff(old, updated *Config) {
+	if old.LogLevel != updated.LogLevel {
+		w.log.Info("config change: logLevel",
+			slog.String("old", old.LogLevel),
+			slog.String("new", updated.LogLevel),
+		)
+	}
+
+	if len(old.Outputs) != len(updated.Outputs) {
+		w.log.Info("config change: outputs count",
+			slog.Int("old", len(old.Outputs)),
+			slog.Int("new", len(updated.Outputs)),
+		)
+	}
+
+	oldNames := make(map[string]struct{}, len(old.Outputs))
+	for idx := range old.Outputs {
+		oldNames[old.Outputs[idx].Name] = struct{}{}
+	}
+
+	for idx := range updated.Outputs {
+		name := updated.Outputs[idx].Name
+		if _, exists := oldNames[name]; !exists {
+			w.log.Info("config change: output added", slog.String("name", name))
+		}
+	}
+
+	newNames := make(map[string]struct{}, len(updated.Outputs))
+	for idx := range updated.Outputs {
+		newNames[updated.Outputs[idx].Name] = struct{}{}
+	}
+
+	for idx := range old.Outputs {
+		name := old.Outputs[idx].Name
+		if _, exists := newNames[name]; !exists {
+			w.log.Info("config change: output removed", slog.String("name", name))
+		}
+	}
+}
+
 func isReloadEvent(evt fsnotify.Event) bool {
 	return evt.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove) != 0
 }
@@ -171,6 +212,7 @@ func (w *Watcher) reload() {
 	}
 
 	configReloadTotal.WithLabelValues("success").Inc()
+	w.logConfigDiff(old, cfg)
 	w.config.Store(cfg)
 	w.log.Info("config reloaded successfully", slog.String("path", w.path))
 

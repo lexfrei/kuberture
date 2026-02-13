@@ -3,10 +3,12 @@ package config
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -49,6 +51,35 @@ func loadInitialConfig(t *testing.T, path string) *Config {
 
 func newTestLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+}
+
+// syncBuffer is a thread-safe bytes.Buffer for capturing log output in tests.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (sb *syncBuffer) Write(p []byte) (int, error) {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+
+	n, err := sb.buf.Write(p)
+	if err != nil {
+		return n, fmt.Errorf("writing to sync buffer: %w", err)
+	}
+
+	return n, nil
+}
+
+func (sb *syncBuffer) String() string {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+
+	return sb.buf.String()
+}
+
+func newBufferedLogger(buf *syncBuffer) *slog.Logger {
+	return slog.New(slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
 }
 
 func noopCancel() {}
@@ -646,6 +677,94 @@ func TestReload_IncrementsErrorMetric(t *testing.T) {
 	after := testutil.ToFloat64(configReloadTotal.WithLabelValues("error"))
 	if after <= before {
 		t.Errorf("error counter did not increment: before=%f, after=%f", before, after)
+	}
+
+	cancel()
+}
+
+func TestReload_LogsOutputChanges(t *testing.T) {
+	path := writeTestConfig(t, validYAML)
+	initial := loadInitialConfig(t, path)
+
+	logBuf := &syncBuffer{}
+	log := newBufferedLogger(logBuf)
+
+	watcher, err := NewWatcher(path, initial, log, noopCancel)
+	if err != nil {
+		t.Fatalf("unexpected error creating watcher: %v", err)
+	}
+
+	defer watcher.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		_ = watcher.Run(ctx)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+
+	writeErr := os.WriteFile(path, []byte(updatedYAML), 0o600)
+	if writeErr != nil {
+		t.Fatalf("writing updated config: %v", writeErr)
+	}
+
+	time.Sleep(300 * time.Millisecond)
+
+	output := logBuf.String()
+	if !strings.Contains(output, "output added") {
+		t.Errorf("expected log to contain 'output added', got: %s", output)
+	}
+
+	if !strings.Contains(output, "output removed") {
+		t.Errorf("expected log to contain 'output removed', got: %s", output)
+	}
+
+	cancel()
+}
+
+func TestReload_LogsLogLevelChange(t *testing.T) {
+	path := writeTestConfig(t, validYAML)
+	initial := loadInitialConfig(t, path)
+
+	logBuf := &syncBuffer{}
+	log := newBufferedLogger(logBuf)
+
+	watcher, err := NewWatcher(path, initial, log, noopCancel)
+	if err != nil {
+		t.Fatalf("unexpected error creating watcher: %v", err)
+	}
+
+	defer watcher.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		_ = watcher.Run(ctx)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+
+	debugYAML := `
+logLevel: debug
+outputs:
+  - name: test
+    hostname:
+      - test.example.com
+    serviceName: test-svc
+`
+	writeErr := os.WriteFile(path, []byte(debugYAML), 0o600)
+	if writeErr != nil {
+		t.Fatalf("writing config with debug level: %v", writeErr)
+	}
+
+	time.Sleep(300 * time.Millisecond)
+
+	output := logBuf.String()
+	if !strings.Contains(output, "logLevel") {
+		t.Errorf("expected log to contain 'logLevel', got: %s", output)
 	}
 
 	cancel()
