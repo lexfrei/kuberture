@@ -89,6 +89,8 @@ func isHostnameChar(ch rune) bool {
 }
 
 // isValidLabel checks a single DNS label for RFC 1123 compliance.
+// Unlike isValidDNSLabel (used for Kubernetes serviceName, lowercase only),
+// this allows uppercase because hostnames are case-insensitive per RFC 952.
 func isValidLabel(label string) bool {
 	const maxLabelLen = 63
 
