@@ -9,7 +9,10 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/go-logr/logr"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -83,6 +86,18 @@ func run() error {
 
 	res := resolver.NewResolver(mgr.GetClient(), logger)
 
+	ownerRef, ownerErr := resolveOwnerDeployment(context.Background(), mgr.GetAPIReader(), podNamespace)
+	if ownerErr != nil {
+		logger.Warn("could not resolve owner deployment; managed Services will not have ownerReferences",
+			slog.String("error", ownerErr.Error()),
+		)
+	} else {
+		logger.Info("resolved owner deployment",
+			slog.String("name", ownerRef.Name),
+			slog.String("uid", string(ownerRef.UID)),
+		)
+	}
+
 	watcher, err := config.NewWatcher(configPath, cfg, logger)
 	if err != nil {
 		return errors.Wrap(err, "creating config watcher")
@@ -101,6 +116,7 @@ func run() error {
 		logger,
 		instanceName,
 		podNamespace,
+		ownerRef,
 	)
 
 	err = reconciler.SetupWithManager(mgr)
@@ -152,6 +168,63 @@ func run() error {
 	}
 
 	return nil
+}
+
+// resolveOwnerDeployment discovers the Deployment that owns the current pod
+// by walking the owner chain: Pod → ReplicaSet → Deployment. Returns nil if
+// the owner cannot be determined (e.g. running locally, bare pod, StatefulSet).
+func resolveOwnerDeployment(
+	ctx context.Context,
+	reader client.Reader,
+	namespace string,
+) (*metav1.OwnerReference, error) {
+	podName := os.Getenv("POD_NAME")
+	if podName == "" {
+		return nil, errors.New("POD_NAME environment variable not set")
+	}
+
+	var pod corev1.Pod
+
+	err := reader.Get(ctx, types.NamespacedName{Name: podName, Namespace: namespace}, &pod)
+	if err != nil {
+		return nil, errors.Wrap(err, "getting controller pod")
+	}
+
+	var rsName string
+
+	for idx := range pod.OwnerReferences {
+		if pod.OwnerReferences[idx].Kind == "ReplicaSet" {
+			rsName = pod.OwnerReferences[idx].Name
+
+			break
+		}
+	}
+
+	if rsName == "" {
+		return nil, errors.New("pod has no ReplicaSet owner")
+	}
+
+	var replicaSet appsv1.ReplicaSet
+
+	err = reader.Get(ctx, types.NamespacedName{Name: rsName, Namespace: namespace}, &replicaSet)
+	if err != nil {
+		return nil, errors.Wrap(err, "getting owner ReplicaSet")
+	}
+
+	for idx := range replicaSet.OwnerReferences {
+		ref := &replicaSet.OwnerReferences[idx]
+		if ref.Kind == "Deployment" {
+			return &metav1.OwnerReference{
+				APIVersion:         ref.APIVersion,
+				Kind:               ref.Kind,
+				Name:               ref.Name,
+				UID:                ref.UID,
+				BlockOwnerDeletion: new(true),
+			}, nil
+		}
+	}
+
+	return nil, errors.New("ReplicaSet has no Deployment owner")
 }
 
 // parseFlags parses CLI flags and environment variables, returning the config

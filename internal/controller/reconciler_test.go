@@ -18,6 +18,7 @@ import (
 	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	applycorev1 "k8s.io/client-go/applyconfigurations/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -193,7 +194,7 @@ func buildTestReconciler(
 	res := resolver.NewResolver(cli, slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	log := slog.Default()
 
-	return NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace)
+	return NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, nil)
 }
 
 func TestReconcile(t *testing.T) {
@@ -672,7 +673,7 @@ func TestReconcile_ErrorListingEndpointSlices(t *testing.T) {
 	res := resolver.NewResolver(cli, slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	log := slog.Default()
 
-	rec := NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace)
+	rec := NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, nil)
 
 	_, err := rec.Reconcile(context.Background(), ctrl.Request{})
 	if err == nil {
@@ -919,7 +920,7 @@ func TestNewReconciler(t *testing.T) {
 
 	cfgPtr := newTestConfig([]config.OutputConfig{defaultOutput()})
 
-	rec := NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace)
+	rec := NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, nil)
 
 	if rec == nil {
 		t.Fatal("NewReconciler returned nil")
@@ -972,7 +973,7 @@ func buildTestReconcilerWithInterceptor(
 	res := resolver.NewResolver(cli, slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	log := slog.Default()
 
-	return NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace)
+	return NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, nil)
 }
 
 func TestReconcile_PartialOutputFailure(t *testing.T) {
@@ -1720,6 +1721,96 @@ func TestBuildService_ManagedByLabel(t *testing.T) {
 	got := svc.Labels[managedByLabel]
 	if got != managedByValue {
 		t.Errorf("managed-by label = %q, want %q", got, managedByValue)
+	}
+}
+
+func TestBuildService_WithOwnerRef(t *testing.T) {
+	ownerRef := &metav1.OwnerReference{
+		APIVersion:         "apps/v1",
+		Kind:               "Deployment",
+		Name:               "kuberture",
+		UID:                types.UID("test-uid-12345"),
+		BlockOwnerDeletion: boolPtr(true),
+	}
+
+	output := config.OutputConfig{
+		Name:             "owner-ref-test",
+		Hostnames:        []string{testHostExample},
+		AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
+		ServiceName:      "svc-owner",
+		RecordTTL:        60,
+	}
+
+	rec := &Reconciler{namespace: testSvcNamespace, ownerRef: ownerRef}
+	svc := rec.buildService(&output, []string{testAddr1})
+
+	if svc.ObjectMetaApplyConfiguration == nil {
+		t.Fatal("ObjectMeta is nil")
+	}
+
+	if len(svc.OwnerReferences) != 1 {
+		t.Fatalf("OwnerReferences length = %d, want 1", len(svc.OwnerReferences))
+	}
+
+	ref := svc.OwnerReferences[0]
+
+	if ref.APIVersion == nil || *ref.APIVersion != "apps/v1" {
+		t.Errorf("OwnerReference APIVersion = %v, want %q", ref.APIVersion, "apps/v1")
+	}
+
+	if ref.Kind == nil || *ref.Kind != "Deployment" {
+		t.Errorf("OwnerReference Kind = %v, want %q", ref.Kind, "Deployment")
+	}
+
+	if ref.Name == nil || *ref.Name != "kuberture" {
+		t.Errorf("OwnerReference Name = %v, want %q", ref.Name, "kuberture")
+	}
+
+	if ref.UID == nil || *ref.UID != types.UID("test-uid-12345") {
+		t.Errorf("OwnerReference UID = %v, want %q", ref.UID, "test-uid-12345")
+	}
+
+	if ref.BlockOwnerDeletion == nil || !*ref.BlockOwnerDeletion {
+		t.Errorf("OwnerReference BlockOwnerDeletion = %v, want true", ref.BlockOwnerDeletion)
+	}
+}
+
+func TestBuildService_WithoutOwnerRef(t *testing.T) {
+	output := config.OutputConfig{
+		Name:             "no-owner-ref-test",
+		Hostnames:        []string{testHostExample},
+		AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
+		ServiceName:      "svc-no-owner",
+		RecordTTL:        60,
+	}
+
+	rec := &Reconciler{namespace: testSvcNamespace, ownerRef: nil}
+	svc := rec.buildService(&output, []string{testAddr1})
+
+	if len(svc.OwnerReferences) != 0 {
+		t.Errorf("OwnerReferences length = %d, want 0 when ownerRef is nil", len(svc.OwnerReferences))
+	}
+}
+
+func TestNewReconciler_WithOwnerRef(t *testing.T) {
+	scheme := newTestScheme(t)
+	cli := fake.NewClientBuilder().WithScheme(scheme).Build()
+	res := resolver.NewResolver(cli, slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	log := slog.Default()
+
+	cfgPtr := newTestConfig([]config.OutputConfig{defaultOutput()})
+
+	ownerRef := &metav1.OwnerReference{
+		APIVersion: "apps/v1",
+		Kind:       "Deployment",
+		Name:       "kuberture",
+		UID:        types.UID("test-uid-456"),
+	}
+
+	rec := NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, ownerRef)
+
+	if rec.ownerRef != ownerRef {
+		t.Error("ownerRef not set correctly")
 	}
 }
 

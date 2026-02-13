@@ -8,6 +8,8 @@ release:
 chart:
   version: 0.1.0
   appVersion: "0.1.0"
+values:
+  - test-values.yaml
 tests:
   - it: should be a Deployment with correct apiVersion
     template: templates/deployment.yaml
@@ -106,8 +108,7 @@ tests:
           path: spec.template.spec.containers[0].volumeMounts
           content:
             name: config
-            mountPath: /etc/kuberture/config.yaml
-            subPath: config.yaml
+            mountPath: /etc/kuberture
             readOnly: true
       - contains:
           path: spec.template.spec.volumes
