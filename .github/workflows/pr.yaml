@@ -256,7 +256,7 @@ jobs:
             --set 'config.outputs[0].serviceName=tmpl-svc'
 
       - name: Install helm-unittest plugin
-        run: helm plugin install https://github.com/helm-unittest/helm-unittest.git
+        run: helm plugin install --verify=false https://github.com/helm-unittest/helm-unittest.git
 
       - name: Run Helm unit tests
         run: helm unittest chart/
