@@ -107,7 +107,7 @@ main() {
     kubectl --context "kind-${CLUSTER_NAME}" create namespace "${NAMESPACE}" --dry-run=client --output=yaml | \
         kubectl --context "kind-${CLUSTER_NAME}" apply --filename=-
 
-    helm install "${RELEASE_NAME}" ./chart \
+    if ! helm install "${RELEASE_NAME}" ./chart \
         --kube-context "kind-${CLUSTER_NAME}" \
         --namespace "${NAMESPACE}" \
         --set image.repository="${IMAGE_NAME}" \
@@ -116,14 +116,22 @@ main() {
         --set "config.outputs[0].name=e2e-test" \
         --set "config.outputs[0].hostname[0]=${OUTPUT_HOSTNAME}" \
         --set "config.outputs[0].serviceName=${OUTPUT_SERVICE}" \
-        --set "config.outputs[0].serviceNamespace=default" \
         --set "config.outputs[0].recordTTL=60" \
         --wait \
-        --timeout 120s
+        --timeout 180s; then
+        info "Debug: Helm install failed, dumping diagnostics"
+        kubectl --context "kind-${CLUSTER_NAME}" --namespace "${NAMESPACE}" \
+            get pods --output=wide 2>/dev/null || true
+        kubectl --context "kind-${CLUSTER_NAME}" --namespace "${NAMESPACE}" \
+            describe deployment/"${RELEASE_NAME}" 2>/dev/null || true
+        kubectl --context "kind-${CLUSTER_NAME}" --namespace "${NAMESPACE}" \
+            logs deployment/"${RELEASE_NAME}" --tail=100 2>/dev/null || true
+        exit 1
+    fi
 
     info "Waiting for deployment rollout"
     kubectl --context "kind-${CLUSTER_NAME}" --namespace "${NAMESPACE}" \
-        rollout status deployment/"${RELEASE_NAME}" --timeout=120s
+        rollout status deployment/"${RELEASE_NAME}" --timeout=60s
 
     info "Waiting for Service to be created by controller"
     wait_for_service
@@ -141,7 +149,7 @@ main() {
         kubectl --context "kind-${CLUSTER_NAME}" --namespace "${NAMESPACE}" \
             logs deployment/"${RELEASE_NAME}" --tail=50 2>/dev/null || true
         info "Debug: Service YAML"
-        kubectl --context "kind-${CLUSTER_NAME}" get svc "${OUTPUT_SERVICE}" \
+        kubectl --context "kind-${CLUSTER_NAME}" --namespace "${NAMESPACE}" get svc "${OUTPUT_SERVICE}" \
             --output=yaml 2>/dev/null || true
         exit 1
     fi
@@ -154,7 +162,7 @@ wait_for_service() {
     local delay=2
 
     for i in $(seq 1 "${retries}"); do
-        if kubectl --context "kind-${CLUSTER_NAME}" get svc "${OUTPUT_SERVICE}" &>/dev/null; then
+        if kubectl --context "kind-${CLUSTER_NAME}" --namespace "${NAMESPACE}" get svc "${OUTPUT_SERVICE}" &>/dev/null; then
             return 0
         fi
         echo "  Waiting for Service ${OUTPUT_SERVICE}... (${i}/${retries})"
@@ -172,7 +180,7 @@ wait_for_service() {
 
 run_assertions() {
     local svc_json
-    svc_json="$(kubectl --context "kind-${CLUSTER_NAME}" get svc "${OUTPUT_SERVICE}" --output=json)"
+    svc_json="$(kubectl --context "kind-${CLUSTER_NAME}" --namespace "${NAMESPACE}" get svc "${OUTPUT_SERVICE}" --output=json)"
 
     # 1. Service is headless (clusterIP == None).
     local cluster_ip

@@ -35,7 +35,6 @@ outputs:
       - www.example.com
     annotationPrefix: "custom.io/"
     serviceName: my-svc
-    serviceNamespace: prod-ns
     recordTTL: 300
     addressSource: node-external
     addressType: IPv6
@@ -136,10 +135,6 @@ outputs:
 	if out.AddressType != "IPv4" {
 		t.Errorf("addressType = %q, want IPv4", out.AddressType)
 	}
-
-	if out.ServiceNamespace != defaultNamespace {
-		t.Errorf("serviceNamespace = %q, want %s", out.ServiceNamespace, defaultNamespace)
-	}
 }
 
 func TestLoad_Validation(t *testing.T) {
@@ -200,19 +195,17 @@ outputs:
 			wantErr: "duplicate output name",
 		},
 		{
-			name: "duplicate service name and namespace",
+			name: "duplicate service name",
 			yaml: `
 outputs:
   - name: first
     hostname: [a.com]
     serviceName: shared-svc
-    serviceNamespace: shared-ns
   - name: second
     hostname: [b.com]
     serviceName: shared-svc
-    serviceNamespace: shared-ns
 `,
-			wantErr: "duplicate serviceName+serviceNamespace pair",
+			wantErr: "duplicate serviceName",
 		},
 		{
 			name: "missing hostname",
@@ -371,15 +364,12 @@ outputs:
   - name: first
     hostname: [a.example.com]
     serviceName: svc-a
-    serviceNamespace: ns-a
   - name: second
     hostname: [b.example.com]
     serviceName: svc-b
-    serviceNamespace: ns-b
   - name: third
     hostname: [c.example.com, d.example.com]
     serviceName: svc-c
-    serviceNamespace: ns-c
     recordTTL: 120
     addressSource: node-internal
     addressType: IPv6
@@ -544,11 +534,9 @@ outputs:
   - name: output-a
     hostname: [shared.example.com, unique-a.example.com]
     serviceName: svc-a
-    serviceNamespace: ns-a
   - name: output-b
     hostname: [shared.example.com, unique-b.example.com]
     serviceName: svc-b
-    serviceNamespace: ns-b
 `
 
 	_, err := Load(writeTestConfig(t, cfgYAML))
@@ -585,7 +573,6 @@ outputs:
   - name: valid-dns
     hostname: [test.com]
     serviceName: my-service
-    serviceNamespace: prod-ns
 `
 
 	cfg, err := Load(writeTestConfig(t, cfgYAML))
@@ -595,29 +582,6 @@ outputs:
 
 	if cfg.Outputs[0].ServiceName != "my-service" {
 		t.Errorf("serviceName = %q, want %q", cfg.Outputs[0].ServiceName, "my-service")
-	}
-
-	if cfg.Outputs[0].ServiceNamespace != "prod-ns" {
-		t.Errorf("serviceNamespace = %q, want %q", cfg.Outputs[0].ServiceNamespace, "prod-ns")
-	}
-}
-
-func TestLoad_InvalidDNSLabelServiceNamespace(t *testing.T) {
-	cfgYAML := `
-outputs:
-  - name: bad-ns
-    hostname: [test.com]
-    serviceName: valid-svc
-    serviceNamespace: "INVALID NS"
-`
-
-	_, err := Load(writeTestConfig(t, cfgYAML))
-	if err == nil {
-		t.Fatal("expected error for invalid serviceNamespace, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "is not a valid DNS label") {
-		t.Errorf("error = %q, want substring %q", err.Error(), "is not a valid DNS label")
 	}
 }
 

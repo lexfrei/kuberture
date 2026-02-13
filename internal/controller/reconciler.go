@@ -44,6 +44,7 @@ type Reconciler struct {
 	config       *atomic.Pointer[config.Config]
 	log          *slog.Logger
 	instanceName string
+	namespace    string
 
 	mu    sync.Mutex
 	ready bool
@@ -56,6 +57,7 @@ func NewReconciler(
 	cfg *atomic.Pointer[config.Config],
 	log *slog.Logger,
 	instanceName string,
+	namespace string,
 ) *Reconciler {
 	return &Reconciler{
 		client:       cli,
@@ -63,6 +65,7 @@ func NewReconciler(
 		config:       cfg,
 		log:          log,
 		instanceName: instanceName,
+		namespace:    namespace,
 	}
 }
 
@@ -223,7 +226,7 @@ func (rec *Reconciler) buildService(
 	output *config.OutputConfig,
 	addresses []string,
 ) *applycorev1.ServiceApplyConfiguration {
-	return applycorev1.Service(output.ServiceName, output.ServiceNamespace).
+	return applycorev1.Service(output.ServiceName, rec.namespace).
 		WithLabels(map[string]string{
 			managedByLabel: managedByValue,
 			instanceLabel:  rec.instanceName,
@@ -239,23 +242,18 @@ func (rec *Reconciler) buildService(
 		)
 }
 
-// serviceKey returns a unique key for a service as "namespace/name".
-func serviceKey(namespace, name string) string {
-	return namespace + "/" + name
-}
-
 // cleanupStaleServices removes Services with the managed-by label that no
 // longer correspond to any configured output.
 func (rec *Reconciler) cleanupStaleServices(ctx context.Context, cfg *config.Config) error {
 	expected := make(map[string]struct{}, len(cfg.Outputs))
 	for idx := range cfg.Outputs {
-		key := serviceKey(cfg.Outputs[idx].ServiceNamespace, cfg.Outputs[idx].ServiceName)
-		expected[key] = struct{}{}
+		expected[cfg.Outputs[idx].ServiceName] = struct{}{}
 	}
 
 	var svcList corev1.ServiceList
 
 	err := rec.client.List(ctx, &svcList,
+		client.InNamespace(rec.namespace),
 		client.MatchingLabels{
 			managedByLabel: managedByValue,
 			instanceLabel:  rec.instanceName,
@@ -269,9 +267,8 @@ func (rec *Reconciler) cleanupStaleServices(ctx context.Context, cfg *config.Con
 
 	for idx := range svcList.Items {
 		svc := &svcList.Items[idx]
-		key := serviceKey(svc.Namespace, svc.Name)
 
-		if _, ok := expected[key]; ok {
+		if _, ok := expected[svc.Name]; ok {
 			continue
 		}
 
