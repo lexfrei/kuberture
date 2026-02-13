@@ -29,6 +29,9 @@ resources:
   limits:
     memory: 64Mi
 
+pdb:
+  minAvailable: 1
+
 nodeSelector: {}
 tolerations: []
 affinity: {}

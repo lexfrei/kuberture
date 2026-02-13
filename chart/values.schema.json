@@ -133,6 +133,16 @@
         }
       }
     },
+    "pdb": {
+      "type": "object",
+      "properties": {
+        "minAvailable": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 1
+        }
+      }
+    },
     "nodeSelector": {
       "type": "object"
     },
