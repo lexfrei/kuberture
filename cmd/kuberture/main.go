@@ -6,6 +6,7 @@ import (
 	"flag"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/go-logr/logr"
@@ -92,7 +93,10 @@ func run() error {
 
 	res := resolver.NewResolver(mgr.GetClient(), logger)
 
-	ownerRef, ownerErr := resolveOwnerDeployment(context.Background(), mgr.GetAPIReader(), podNamespace)
+	ownerCtx, ownerCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer ownerCancel()
+
+	ownerRef, ownerErr := resolveOwnerDeployment(ownerCtx, mgr.GetAPIReader(), podNamespace)
 	if ownerErr != nil {
 		logger.Warn("could not resolve owner deployment; managed Services will not have ownerReferences",
 			slog.String("error", ownerErr.Error()),
