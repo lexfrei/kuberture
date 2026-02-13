@@ -118,6 +118,10 @@ func (rec *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if rec.reloadCh != nil {
 		eventCh := make(chan event.GenericEvent, 1)
 
+		// This goroutine bridges reloadCh (struct{}) to eventCh (GenericEvent).
+		// It lives for the entire process lifetime because reloadCh is
+		// intentionally never closed (see watcher.go Close comment).
+		// Only one instance exists per controller, so the leak is harmless.
 		go func() {
 			for range rec.reloadCh {
 				select {
