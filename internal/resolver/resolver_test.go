@@ -16,14 +16,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 )
 
-func boolPtr(val bool) *bool {
-	return &val
-}
-
-func strPtr(val string) *string {
-	return &val
-}
-
 func newScheme(t *testing.T) *runtime.Scheme {
 	t.Helper()
 
@@ -75,7 +67,7 @@ func TestResolveAddresses(t *testing.T) {
 				makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{"10.0.0.1", "10.0.0.2"},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 					},
 				}),
 			},
@@ -89,13 +81,13 @@ func TestResolveAddresses(t *testing.T) {
 				makeEndpointSlice("eps-v4", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{"10.0.0.1"},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 					},
 				}),
 				makeEndpointSlice("eps-v6", discoveryv1.AddressTypeIPv6, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{"fd00::1"},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 					},
 				}),
 			},
@@ -109,11 +101,11 @@ func TestResolveAddresses(t *testing.T) {
 				makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{"10.0.0.1"},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 					},
 					{
 						Addresses:  []string{"10.0.0.2"},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(false)},
+						Conditions: discoveryv1.EndpointConditions{Ready: new(false)},
 					},
 				}),
 			},
@@ -141,7 +133,7 @@ func TestResolveAddresses(t *testing.T) {
 				makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{"10.0.0.3", "10.0.0.1", "10.0.0.2", "10.0.0.1"},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 					},
 				}),
 			},
@@ -155,8 +147,8 @@ func TestResolveAddresses(t *testing.T) {
 				makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{"10.244.0.5"},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
-						NodeName:   strPtr("node-1"),
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
+						NodeName:   new("node-1"),
 					},
 				}),
 			},
@@ -176,8 +168,8 @@ func TestResolveAddresses(t *testing.T) {
 				makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{"10.244.0.5"},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
-						NodeName:   strPtr("node-1"),
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
+						NodeName:   new("node-1"),
 					},
 				}),
 			},
@@ -197,8 +189,8 @@ func TestResolveAddresses(t *testing.T) {
 				makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{"10.244.0.5"},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
-						NodeName:   strPtr("node-1"),
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
+						NodeName:   new("node-1"),
 					},
 				}),
 			},
@@ -218,7 +210,7 @@ func TestResolveAddresses(t *testing.T) {
 				makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{"192.168.1.10"},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 					},
 				}),
 			},
@@ -238,8 +230,8 @@ func TestResolveAddresses(t *testing.T) {
 				makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{"10.244.0.5"},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
-						NodeName:   strPtr("node-1"),
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
+						NodeName:   new("node-1"),
 					},
 				}),
 			},
@@ -258,13 +250,13 @@ func TestResolveAddresses(t *testing.T) {
 				makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{"10.0.0.1"},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 					},
 				}),
 				makeEndpointSlice("eps-2", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{"10.0.0.2"},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 					},
 				}),
 			},
@@ -285,11 +277,11 @@ func TestResolveAddresses(t *testing.T) {
 				makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{"10.0.0.1"},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(false)},
+						Conditions: discoveryv1.EndpointConditions{Ready: new(false)},
 					},
 					{
 						Addresses:  []string{"10.0.0.2"},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(false)},
+						Conditions: discoveryv1.EndpointConditions{Ready: new(false)},
 					},
 				}),
 			},
@@ -303,7 +295,7 @@ func TestResolveAddresses(t *testing.T) {
 				makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 					},
 				}),
 			},
@@ -317,13 +309,13 @@ func TestResolveAddresses(t *testing.T) {
 				makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{"10.244.0.5"},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
-						NodeName:   strPtr("node-1"),
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
+						NodeName:   new("node-1"),
 					},
 					{
 						Addresses:  []string{"10.244.0.6"},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
-						NodeName:   strPtr("node-1"),
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
+						NodeName:   new("node-1"),
 					},
 				}),
 			},
@@ -342,8 +334,8 @@ func TestResolveAddresses(t *testing.T) {
 				makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{"10.244.0.5"},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
-						NodeName:   strPtr("node-1"),
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
+						NodeName:   new("node-1"),
 					},
 				}),
 			},
@@ -363,8 +355,8 @@ func TestResolveAddresses(t *testing.T) {
 				makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{"10.244.0.5"},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
-						NodeName:   strPtr("node-1"),
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
+						NodeName:   new("node-1"),
 					},
 				}),
 			},
@@ -384,8 +376,8 @@ func TestResolveAddresses(t *testing.T) {
 				makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{"10.244.0.5"},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
-						NodeName:   strPtr("node-1"),
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
+						NodeName:   new("node-1"),
 					},
 				}),
 			},
@@ -405,8 +397,8 @@ func TestResolveAddresses(t *testing.T) {
 				makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{"10.244.0.5"},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
-						NodeName:   strPtr("node-1"),
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
+						NodeName:   new("node-1"),
 					},
 				}),
 			},
@@ -425,7 +417,7 @@ func TestResolveAddresses(t *testing.T) {
 				makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{"10.99.99.99"},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 					},
 				}),
 			},
@@ -444,12 +436,12 @@ func TestResolveAddresses(t *testing.T) {
 				makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{"10.244.0.5"},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
-						NodeName:   strPtr("node-1"),
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
+						NodeName:   new("node-1"),
 					},
 					{
 						Addresses:  []string{"192.168.1.20"},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 					},
 				}),
 			},
@@ -565,8 +557,8 @@ func TestResolveAddresses_NodeGetError(t *testing.T) {
 		makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 			{
 				Addresses:  []string{"10.244.0.5"},
-				Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
-				NodeName:   strPtr("node-1"),
+				Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
+				NodeName:   new("node-1"),
 			},
 		}),
 	}
@@ -611,7 +603,7 @@ func TestResolveAddresses_NodeListError(t *testing.T) {
 		makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 			{
 				Addresses:  []string{"192.168.1.10"},
-				Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+				Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 			},
 		}),
 	}
