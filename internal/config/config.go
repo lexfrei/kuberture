@@ -82,6 +82,33 @@ func isValidDNSLabel(name string) bool {
 	return true
 }
 
+// isHostnameChar reports whether ch is valid in a DNS label (alphanumeric or hyphen).
+func isHostnameChar(ch rune) bool {
+	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+		(ch >= '0' && ch <= '9') || ch == '-'
+}
+
+// isValidLabel checks a single DNS label for RFC 1123 compliance.
+func isValidLabel(label string) bool {
+	const maxLabelLen = 63
+
+	if label == "" || len(label) > maxLabelLen {
+		return false
+	}
+
+	if label[0] == '-' || label[len(label)-1] == '-' {
+		return false
+	}
+
+	for _, ch := range label {
+		if !isHostnameChar(ch) {
+			return false
+		}
+	}
+
+	return true
+}
+
 // isValidHostname checks whether h is a valid DNS hostname per RFC 952/1123.
 // It accepts optional wildcard prefix (*.example.com) and trailing dot.
 // Requires at least two labels (e.g. "example.com", not "localhost").
@@ -90,16 +117,13 @@ func isValidHostname(h string) bool {
 		return false
 	}
 
-	// Strip optional trailing dot.
 	check := strings.TrimSuffix(h, ".")
 
-	// Total length limit: 253 characters.
 	const maxHostnameLen = 253
 	if len(check) > maxHostnameLen {
 		return false
 	}
 
-	// Handle wildcard prefix.
 	if strings.HasPrefix(check, "*.") {
 		check = check[2:]
 	} else if strings.Contains(check, "*") {
@@ -111,22 +135,9 @@ func isValidHostname(h string) bool {
 		return false
 	}
 
-	const maxLabelLen = 63
-
 	for _, label := range labels {
-		if label == "" || len(label) > maxLabelLen {
+		if !isValidLabel(label) {
 			return false
-		}
-
-		if label[0] == '-' || label[len(label)-1] == '-' {
-			return false
-		}
-
-		for _, ch := range label {
-			if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
-				(ch >= '0' && ch <= '9') || ch == '-') {
-				return false
-			}
 		}
 	}
 

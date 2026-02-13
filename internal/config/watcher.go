@@ -105,20 +105,20 @@ func (w *Watcher) Run(ctx context.Context) error {
 
 // restartReason returns a non-empty string describing the first field that
 // changed and requires a process restart, or "" if a hot-reload is sufficient.
-func (w *Watcher) restartReason(old, new *Config) string {
-	if old.MetricsBindAddress != new.MetricsBindAddress {
+func (w *Watcher) restartReason(old, updated *Config) string {
+	if old.MetricsBindAddress != updated.MetricsBindAddress {
 		return "metricsBindAddress changed"
 	}
 
-	if old.HealthProbeBindAddress != new.HealthProbeBindAddress {
+	if old.HealthProbeBindAddress != updated.HealthProbeBindAddress {
 		return "healthProbeBindAddress changed"
 	}
 
-	if old.Source.Namespace != new.Source.Namespace {
+	if old.Source.Namespace != updated.Source.Namespace {
 		return "source.namespace changed"
 	}
 
-	if old.Source.ServiceName != new.Source.ServiceName {
+	if old.Source.ServiceName != updated.Source.ServiceName {
 		return "source.serviceName changed"
 	}
 
