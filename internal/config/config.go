@@ -102,7 +102,6 @@ type OutputConfig struct {
 	Hostnames        []string `yaml:"hostname"` //nolint:tagliatelle // user-facing YAML field name is intentionally singular
 	AnnotationPrefix string   `yaml:"annotationPrefix"`
 	ServiceName      string   `yaml:"serviceName"`
-	ServiceNamespace string   `yaml:"serviceNamespace"`
 	RecordTTL        int      `yaml:"recordTTL"` //nolint:tagliatelle // TTL is a well-known abbreviation, keep uppercase
 	AddressSource    string   `yaml:"addressSource"`
 	AddressType      string   `yaml:"addressType"`
@@ -177,10 +176,6 @@ func applyOutputDefaults(cfg *Config) {
 		if out.AddressType == "" {
 			out.AddressType = defaultAddressType
 		}
-
-		if out.ServiceNamespace == "" {
-			out.ServiceNamespace = defaultNamespace
-		}
 	}
 }
 
@@ -234,13 +229,6 @@ func validateSingleOutput(out *OutputConfig) error {
 		)
 	}
 
-	if !isValidDNSLabel(out.ServiceNamespace) {
-		return errors.Wrapf(
-			errors.Newf("serviceNamespace %q is not a valid DNS label", out.ServiceNamespace),
-			"output %s", out.Name,
-		)
-	}
-
 	return validateOutputEnums(out)
 }
 
@@ -287,7 +275,7 @@ func validateOutputUniqueness(outputs []OutputConfig) error {
 		return namesErr
 	}
 
-	svcErr := validateUniqueServicePairs(outputs)
+	svcErr := validateUniqueServiceNames(outputs)
 	if svcErr != nil {
 		return svcErr
 	}
@@ -313,28 +301,19 @@ func validateUniqueNames(outputs []OutputConfig) error {
 	return nil
 }
 
-func validateUniqueServicePairs(outputs []OutputConfig) error {
-	type svcKey struct {
-		name      string
-		namespace string
-	}
-
-	seen := make(map[svcKey]bool, len(outputs))
+func validateUniqueServiceNames(outputs []OutputConfig) error {
+	seen := make(map[string]bool, len(outputs))
 
 	for idx := range outputs {
-		key := svcKey{
-			name:      outputs[idx].ServiceName,
-			namespace: outputs[idx].ServiceNamespace,
-		}
-
-		if seen[key] {
+		name := outputs[idx].ServiceName
+		if seen[name] {
 			return errors.Wrap(
-				errors.New("duplicate serviceName+serviceNamespace pair"),
-				key.namespace+"/"+key.name,
+				errors.New("duplicate serviceName"),
+				name,
 			)
 		}
 
-		seen[key] = true
+		seen[name] = true
 	}
 
 	return nil

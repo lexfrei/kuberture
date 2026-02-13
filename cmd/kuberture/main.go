@@ -76,12 +76,18 @@ func run() error {
 		}
 	}()
 
+	podNamespace := os.Getenv("POD_NAMESPACE")
+	if podNamespace == "" {
+		podNamespace = "default"
+	}
+
 	reconciler := controller.NewReconciler(
 		mgr.GetClient(),
 		res,
 		watcher.ConfigPointer(),
 		logger,
 		instanceName,
+		podNamespace,
 	)
 
 	err = reconciler.SetupWithManager(mgr)
