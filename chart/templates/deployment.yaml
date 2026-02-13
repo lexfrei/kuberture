@@ -44,6 +44,10 @@ spec:
           env:
             - name: KUBERTURE_INSTANCE
               value: {{ include "kuberture.fullname" . | quote }}
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
           ports:
             - name: metrics
               containerPort: {{ last (splitList ":" .Values.config.metricsBindAddress) | int }}
