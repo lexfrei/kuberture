@@ -1,10 +1,12 @@
 package config
 
 import (
+	"bytes"
 	"context"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -331,6 +333,146 @@ func TestWatcher_WatchesParentDirectory(t *testing.T) {
 		case <-ticker.C:
 			cfg := watcher.Config()
 			if len(cfg.Outputs) > 0 && cfg.Outputs[0].Name == outputNameUpdated {
+				cancel()
+
+				return
+			}
+		}
+	}
+}
+
+func newCapturingLogger(buf *bytes.Buffer) *slog.Logger {
+	return slog.New(slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+}
+
+func TestReload_WarnsOnSourceNamespaceChange(t *testing.T) {
+	initialYAML := `
+source:
+  namespace: kube-system
+  serviceName: kubernetes
+outputs:
+  - name: test
+    hostname:
+      - test.example.com
+    serviceName: test-svc
+`
+	updatedSourceYAML := `
+source:
+  namespace: monitoring
+  serviceName: kubernetes
+outputs:
+  - name: test
+    hostname:
+      - test.example.com
+    serviceName: test-svc
+`
+
+	path := writeTestConfig(t, initialYAML)
+	initial := loadInitialConfig(t, path)
+
+	var logBuf bytes.Buffer
+	log := newCapturingLogger(&logBuf)
+
+	watcher, err := NewWatcher(path, initial, log)
+	if err != nil {
+		t.Fatalf("unexpected error creating watcher: %v", err)
+	}
+
+	defer watcher.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		_ = watcher.Run(ctx)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+
+	writeErr := os.WriteFile(path, []byte(updatedSourceYAML), 0o600)
+	if writeErr != nil {
+		t.Fatalf("writing updated config: %v", writeErr)
+	}
+
+	deadline := time.After(2 * time.Second)
+	ticker := time.NewTicker(50 * time.Millisecond)
+
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-deadline:
+			t.Fatalf("timed out waiting for source namespace warning; log output:\n%s", logBuf.String())
+		case <-ticker.C:
+			if strings.Contains(logBuf.String(), "source.namespace changed") {
+				cancel()
+
+				return
+			}
+		}
+	}
+}
+
+func TestReload_WarnsOnSourceServiceNameChange(t *testing.T) {
+	initialYAML := `
+source:
+  namespace: default
+  serviceName: kubernetes
+outputs:
+  - name: test
+    hostname:
+      - test.example.com
+    serviceName: test-svc
+`
+	updatedSourceYAML := `
+source:
+  namespace: default
+  serviceName: kube-apiserver
+outputs:
+  - name: test
+    hostname:
+      - test.example.com
+    serviceName: test-svc
+`
+
+	path := writeTestConfig(t, initialYAML)
+	initial := loadInitialConfig(t, path)
+
+	var logBuf bytes.Buffer
+	log := newCapturingLogger(&logBuf)
+
+	watcher, err := NewWatcher(path, initial, log)
+	if err != nil {
+		t.Fatalf("unexpected error creating watcher: %v", err)
+	}
+
+	defer watcher.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		_ = watcher.Run(ctx)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+
+	writeErr := os.WriteFile(path, []byte(updatedSourceYAML), 0o600)
+	if writeErr != nil {
+		t.Fatalf("writing updated config: %v", writeErr)
+	}
+
+	deadline := time.After(2 * time.Second)
+	ticker := time.NewTicker(50 * time.Millisecond)
+
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-deadline:
+			t.Fatalf("timed out waiting for source serviceName warning; log output:\n%s", logBuf.String())
+		case <-ticker.C:
+			if strings.Contains(logBuf.String(), "source.serviceName changed") {
 				cancel()
 
 				return
