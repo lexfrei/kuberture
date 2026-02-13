@@ -34,6 +34,7 @@ const (
 	defaultRecordTTL        = 60
 	defaultAddressSource    = AddressSourceEndpointSlice
 	defaultAddressType      = AddressTypeIPv4
+	defaultLogLevel         = "info"
 	debounceDuration        = 100 * time.Millisecond
 )
 
@@ -152,6 +153,7 @@ type Config struct {
 	Outputs                []OutputConfig `yaml:"outputs"`
 	MetricsBindAddress     string         `yaml:"metricsBindAddress"`
 	HealthProbeBindAddress string         `yaml:"healthProbeBindAddress"`
+	LogLevel               string         `yaml:"logLevel"`
 }
 
 // SourceConfig defines the source Kubernetes service to watch.
@@ -219,6 +221,10 @@ func applyBindDefaults(cfg *Config) {
 	if cfg.HealthProbeBindAddress == "" {
 		cfg.HealthProbeBindAddress = defaultHealthProbeAddr
 	}
+
+	if cfg.LogLevel == "" {
+		cfg.LogLevel = defaultLogLevel
+	}
 }
 
 func applyOutputDefaults(cfg *Config) {
@@ -243,9 +249,23 @@ func applyOutputDefaults(cfg *Config) {
 	}
 }
 
+// isValidLogLevel reports whether the given level is a supported slog level.
+func isValidLogLevel(level string) bool {
+	switch level {
+	case "debug", "info", "warn", "error":
+		return true
+	default:
+		return false
+	}
+}
+
 func validate(cfg *Config) error {
 	if len(cfg.Outputs) == 0 {
 		return errors.New("at least one output is required")
+	}
+
+	if !isValidLogLevel(cfg.LogLevel) {
+		return errors.Newf("invalid logLevel %q, must be one of: debug, info, warn, error", cfg.LogLevel)
 	}
 
 	fieldsErr := validateOutputFields(cfg.Outputs)

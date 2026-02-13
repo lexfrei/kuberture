@@ -44,7 +44,8 @@ func main() {
 func run() error {
 	configPath, leaderElect, instanceName := parseFlags()
 
-	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+	logLevel := &slog.LevelVar{}
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel}))
 	ctrl.SetLogger(logr.FromSlogHandler(logger.Handler()))
 
 	logger.Info("kuberture starting",
@@ -56,6 +57,8 @@ func run() error {
 	if err != nil {
 		return errors.Wrap(err, "loading config")
 	}
+
+	setLogLevel(logLevel, cfg.LogLevel)
 
 	logger.Info("config loaded", slog.String("path", configPath))
 
@@ -238,6 +241,20 @@ func resolveOwnerDeployment(
 	}
 
 	return nil, errors.New("ReplicaSet has no Deployment owner")
+}
+
+// setLogLevel maps a config log level string to the corresponding slog.Level.
+func setLogLevel(lv *slog.LevelVar, level string) {
+	switch level {
+	case "debug":
+		lv.Set(slog.LevelDebug)
+	case "warn":
+		lv.Set(slog.LevelWarn)
+	case "error":
+		lv.Set(slog.LevelError)
+	default:
+		lv.Set(slog.LevelInfo)
+	}
 }
 
 // parseFlags parses CLI flags and environment variables, returning the config

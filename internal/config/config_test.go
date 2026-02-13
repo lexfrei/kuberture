@@ -676,6 +676,68 @@ outputs:
 	}
 }
 
+func TestApplyDefaults_LogLevel(t *testing.T) {
+	cfgYAML := `
+outputs:
+  - name: test
+    hostname: [test.com]
+    serviceName: svc
+`
+
+	cfg, err := Load(writeTestConfig(t, cfgYAML))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if cfg.LogLevel != "info" {
+		t.Errorf("logLevel = %q, want %q", cfg.LogLevel, "info")
+	}
+}
+
+func TestValidate_InvalidLogLevel(t *testing.T) {
+	cfgYAML := `
+logLevel: "trace"
+outputs:
+  - name: test
+    hostname: [test.com]
+    serviceName: svc
+`
+
+	_, err := Load(writeTestConfig(t, cfgYAML))
+	if err == nil {
+		t.Fatal("expected error for invalid logLevel, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "invalid logLevel") {
+		t.Errorf("error = %q, want substring %q", err.Error(), "invalid logLevel")
+	}
+}
+
+func TestValidate_ValidLogLevels(t *testing.T) {
+	levels := []string{"debug", "info", "warn", "error"}
+
+	for _, level := range levels {
+		t.Run(level, func(t *testing.T) {
+			cfgYAML := `
+logLevel: "` + level + `"
+outputs:
+  - name: test
+    hostname: [test.com]
+    serviceName: svc
+`
+
+			cfg, err := Load(writeTestConfig(t, cfgYAML))
+			if err != nil {
+				t.Fatalf("unexpected error for logLevel %q: %v", level, err)
+			}
+
+			if cfg.LogLevel != level {
+				t.Errorf("logLevel = %q, want %q", cfg.LogLevel, level)
+			}
+		})
+	}
+}
+
 func TestLoad_SpecialCharactersInName(t *testing.T) {
 	names := []string{"my.output", "my-output", "my_output", "output-v2.1"}
 
