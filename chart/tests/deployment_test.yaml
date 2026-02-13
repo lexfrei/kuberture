@@ -152,6 +152,27 @@ tests:
           path: spec.replicas
           value: 3
 
+  - it: should use Recreate strategy with single replica
+    template: templates/deployment.yaml
+    set:
+      replicaCount: 1
+    asserts:
+      - equal:
+          path: spec.strategy.type
+          value: Recreate
+
+  - it: should use RollingUpdate strategy with multiple replicas
+    template: templates/deployment.yaml
+    set:
+      replicaCount: 3
+    asserts:
+      - equal:
+          path: spec.strategy.type
+          value: RollingUpdate
+      - equal:
+          path: spec.strategy.rollingUpdate.maxUnavailable
+          value: 1
+
   - it: should use correct imagePullPolicy
     template: templates/deployment.yaml
     asserts:
