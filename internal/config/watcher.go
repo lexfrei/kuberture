@@ -127,6 +127,20 @@ func (w *Watcher) reload() {
 		)
 	}
 
+	if old.Source.Namespace != cfg.Source.Namespace {
+		w.log.Warn("source.namespace changed but requires restart to take effect",
+			slog.String("old", old.Source.Namespace),
+			slog.String("new", cfg.Source.Namespace),
+		)
+	}
+
+	if old.Source.ServiceName != cfg.Source.ServiceName {
+		w.log.Warn("source.serviceName changed but requires restart to take effect",
+			slog.String("old", old.Source.ServiceName),
+			slog.String("new", cfg.Source.ServiceName),
+		)
+	}
+
 	w.config.Store(cfg)
 	w.log.Info("config reloaded successfully", slog.String("path", w.path))
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -75,6 +76,11 @@ func run() error {
 				&corev1.Service{}: {
 					Namespaces: map[string]cache.Config{
 						podNamespace: {},
+					},
+				},
+				&discoveryv1.EndpointSlice{}: {
+					Namespaces: map[string]cache.Config{
+						cfg.Source.Namespace: {},
 					},
 				},
 			},
