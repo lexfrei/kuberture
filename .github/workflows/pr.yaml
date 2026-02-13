@@ -255,6 +255,19 @@ jobs:
             --set 'config.outputs[0].hostname[0]=test.example.com' \
             --set 'config.outputs[0].serviceName=tmpl-svc'
 
+  # Helm chart unit tests
+  test-chart:
+    name: Test Chart
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Set up Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with:
+          version: 'latest'
+
       - name: Install helm-unittest plugin
         run: helm plugin install --verify=false https://github.com/helm-unittest/helm-unittest.git
 
@@ -265,7 +278,7 @@ jobs:
   build-chart:
     name: Build Chart
     runs-on: ubuntu-latest
-    needs: [lint, test, e2e, lint-chart]
+    needs: [lint, test, e2e, lint-chart, test-chart]
     steps:
       - name: Checkout PR code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
