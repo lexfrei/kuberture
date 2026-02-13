@@ -61,6 +61,26 @@ jobs:
           flags: unittests
           name: codecov-umbrella
 
+  # Vulnerability scanning
+  vuln:
+    name: Vulnerability Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR code
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run govulncheck
+        run: govulncheck ./...
+
   # E2E tests with kind
   e2e:
     name: E2E Tests
@@ -92,7 +112,7 @@ jobs:
   # Build containers only after lint, test, and e2e succeed
   build-and-push:
     name: Build and Push (${{ matrix.arch }})
-    needs: [lint, test, e2e]
+    needs: [lint, test, e2e, vuln]
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
