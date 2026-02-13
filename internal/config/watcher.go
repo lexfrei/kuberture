@@ -76,6 +76,9 @@ func (w *Watcher) ReloadChannel() <-chan struct{} {
 }
 
 // Close stops the file system watcher and releases resources.
+// The reload channel is intentionally NOT closed here because Close()
+// may race with reload() in the Run goroutine. The channel goroutine
+// in SetupWithManager terminates when the process exits.
 func (w *Watcher) Close() error {
 	err := w.fsWatcher.Close()
 	if err != nil {

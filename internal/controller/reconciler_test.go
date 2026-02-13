@@ -635,8 +635,8 @@ func TestReconcile(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			if result.RequeueAfter != 0 {
-				t.Error("unexpected requeue")
+			if result.RequeueAfter != requeueInterval {
+				t.Errorf("RequeueAfter = %v, want %v", result.RequeueAfter, requeueInterval)
 			}
 
 			if len(applied) != tt.wantApplied {

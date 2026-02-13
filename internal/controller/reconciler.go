@@ -41,6 +41,10 @@ const (
 	// stalenessThreshold is how long since the last successful reconciliation
 	// before the readiness check reports unhealthy.
 	stalenessThreshold = 5 * time.Minute
+
+	// requeueInterval is how often the controller re-reconciles to prevent
+	// the readiness probe from going stale on quiet clusters.
+	requeueInterval = 2 * time.Minute
 )
 
 // Reconciler watches EndpointSlice and Node resources and maintains headless
@@ -116,9 +120,12 @@ func (rec *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 		go func() {
 			for range rec.reloadCh {
-				eventCh <- event.GenericEvent{Object: &corev1.ConfigMap{
+				select {
+				case eventCh <- event.GenericEvent{Object: &corev1.ConfigMap{
 					ObjectMeta: metav1.ObjectMeta{Name: "config-reload"},
-				}}
+				}}:
+				default:
+				}
 			}
 		}()
 
@@ -159,7 +166,7 @@ func (rec *Reconciler) Reconcile(ctx context.Context, _ ctrl.Request) (ctrl.Resu
 	lastReconcileTimestamp.Set(float64(time.Now().Unix()))
 	rec.markReady()
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: requeueInterval}, nil
 }
 
 // ReadyzCheck reports whether the controller has completed at least one
@@ -172,9 +179,10 @@ func (rec *Reconciler) ReadyzCheck(_ *http.Request) error {
 		return errNotReconciled
 	}
 
-	if time.Since(rec.lastSuccess) > stalenessThreshold {
+	since := time.Since(rec.lastSuccess)
+	if since > stalenessThreshold {
 		return errors.Newf("last successful reconciliation was %s ago (stale threshold: %s)",
-			time.Since(rec.lastSuccess).Round(time.Second), stalenessThreshold)
+			since.Round(time.Second), stalenessThreshold)
 	}
 
 	return nil
