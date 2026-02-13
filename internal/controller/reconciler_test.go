@@ -12,8 +12,10 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -48,14 +50,6 @@ type appliedService struct {
 	annotations map[string]string
 	clusterIP   string
 	serviceType corev1.ServiceType
-}
-
-func boolPtr(val bool) *bool {
-	return &val
-}
-
-func strPtr(val string) *string {
-	return &val
 }
 
 func newTestScheme(t *testing.T) *runtime.Scheme {
@@ -120,7 +114,7 @@ func defaultOutput() config.OutputConfig {
 		Hostnames:        []string{testHostExample},
 		AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 		ServiceName:      testSvcDefault,
-		RecordTTL:        60,
+		RecordTTL:        new(60),
 		AddressSource:    config.AddressSourceEndpointSlice,
 		AddressType:      config.AddressTypeIPv4,
 	}
@@ -194,7 +188,7 @@ func buildTestReconciler(
 	res := resolver.NewResolver(cli, slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	log := slog.Default()
 
-	return NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, nil)
+	return NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, nil, nil)
 }
 
 func TestReconcile(t *testing.T) {
@@ -213,7 +207,7 @@ func TestReconcile(t *testing.T) {
 				makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{testAddr1},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 					},
 				}),
 			},
@@ -264,13 +258,13 @@ func TestReconcile(t *testing.T) {
 				makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{"10.0.0.3"},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 					},
 				}),
 				makeEndpointSlice("eps-2", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{testAddr1},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 					},
 				}),
 			},
@@ -291,15 +285,15 @@ func TestReconcile(t *testing.T) {
 				makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{testAddr1},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 					},
 					{
 						Addresses:  []string{"10.0.0.2"},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(false)},
+						Conditions: discoveryv1.EndpointConditions{Ready: new(false)},
 					},
 					{
 						Addresses:  []string{"10.0.0.3"},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 					},
 				}),
 			},
@@ -340,7 +334,7 @@ func TestReconcile(t *testing.T) {
 				makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{testAddr1},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(false)},
+						Conditions: discoveryv1.EndpointConditions{Ready: new(false)},
 					},
 				}),
 			},
@@ -353,13 +347,13 @@ func TestReconcile(t *testing.T) {
 				makeEndpointSlice("eps-v4", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{testAddr1},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 					},
 				}),
 				makeEndpointSlice("eps-v6", discoveryv1.AddressTypeIPv6, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{"fd00::1"},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 					},
 				}),
 			},
@@ -379,13 +373,13 @@ func TestReconcile(t *testing.T) {
 				makeEndpointSlice("eps-v4", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{testAddr1},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 					},
 				}),
 				makeEndpointSlice("eps-v6", discoveryv1.AddressTypeIPv6, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{"fd00::1"},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 					},
 				}),
 			},
@@ -395,7 +389,7 @@ func TestReconcile(t *testing.T) {
 					Hostnames:        []string{testHostExample},
 					AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 					ServiceName:      "kuberture-v6",
-					RecordTTL:        60,
+					RecordTTL:        new(60),
 					AddressSource:    config.AddressSourceEndpointSlice,
 					AddressType:      config.AddressTypeIPv6,
 				},
@@ -415,7 +409,7 @@ func TestReconcile(t *testing.T) {
 				makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{testAddr1},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 					},
 				}),
 			},
@@ -425,7 +419,7 @@ func TestReconcile(t *testing.T) {
 					Hostnames:        []string{"a.example.com"},
 					AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 					ServiceName:      testSvcA,
-					RecordTTL:        120,
+					RecordTTL:        new(120),
 					AddressSource:    config.AddressSourceEndpointSlice,
 					AddressType:      config.AddressTypeIPv4,
 				},
@@ -434,7 +428,7 @@ func TestReconcile(t *testing.T) {
 					Hostnames:        []string{"b.example.com"},
 					AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 					ServiceName:      testSvcB,
-					RecordTTL:        300,
+					RecordTTL:        new(300),
 					AddressSource:    config.AddressSourceEndpointSlice,
 					AddressType:      config.AddressTypeIPv4,
 				},
@@ -468,8 +462,8 @@ func TestReconcile(t *testing.T) {
 				makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{"10.244.0.5"},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
-						NodeName:   strPtr("node-1"),
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
+						NodeName:   new("node-1"),
 					},
 				}),
 				makeNode("node-1", []corev1.NodeAddress{
@@ -483,7 +477,7 @@ func TestReconcile(t *testing.T) {
 					Hostnames:        []string{testHostExample},
 					AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 					ServiceName:      "kuberture-ni",
-					RecordTTL:        60,
+					RecordTTL:        new(60),
 					AddressSource:    config.AddressSourceNodeInternal,
 					AddressType:      config.AddressTypeIPv4,
 				},
@@ -503,8 +497,8 @@ func TestReconcile(t *testing.T) {
 				makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{"10.244.0.5"},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
-						NodeName:   strPtr("node-1"),
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
+						NodeName:   new("node-1"),
 					},
 				}),
 				makeNode("node-1", []corev1.NodeAddress{
@@ -518,7 +512,7 @@ func TestReconcile(t *testing.T) {
 					Hostnames:        []string{testHostExample},
 					AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 					ServiceName:      "kuberture-ne",
-					RecordTTL:        60,
+					RecordTTL:        new(60),
 					AddressSource:    config.AddressSourceNodeExternal,
 					AddressType:      config.AddressTypeIPv4,
 				},
@@ -538,8 +532,8 @@ func TestReconcile(t *testing.T) {
 				makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{"10.244.0.5"},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
-						NodeName:   strPtr("node-1"),
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
+						NodeName:   new("node-1"),
 					},
 				}),
 				makeNode("node-1", []corev1.NodeAddress{
@@ -553,7 +547,7 @@ func TestReconcile(t *testing.T) {
 					Hostnames:        []string{testHostExample},
 					AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 					ServiceName:      "kuberture-np",
-					RecordTTL:        60,
+					RecordTTL:        new(60),
 					AddressSource:    config.AddressSourceNodePublic,
 					AddressType:      config.AddressTypeIPv4,
 				},
@@ -573,7 +567,7 @@ func TestReconcile(t *testing.T) {
 				makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{testAddr1},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 					},
 				}),
 			},
@@ -583,7 +577,7 @@ func TestReconcile(t *testing.T) {
 					Hostnames:        []string{"a.example.com", "b.example.com", "c.example.com"},
 					AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 					ServiceName:      "kuberture-mh",
-					RecordTTL:        60,
+					RecordTTL:        new(60),
 					AddressSource:    config.AddressSourceEndpointSlice,
 					AddressType:      config.AddressTypeIPv4,
 				},
@@ -604,7 +598,7 @@ func TestReconcile(t *testing.T) {
 				makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{testAddr1},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 					},
 				}),
 			},
@@ -634,8 +628,8 @@ func TestReconcile(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			if result.RequeueAfter != 0 {
-				t.Error("unexpected requeue")
+			if result.RequeueAfter != requeueInterval {
+				t.Errorf("RequeueAfter = %v, want %v", result.RequeueAfter, requeueInterval)
 			}
 
 			if len(applied) != tt.wantApplied {
@@ -673,7 +667,7 @@ func TestReconcile_ErrorListingEndpointSlices(t *testing.T) {
 	res := resolver.NewResolver(cli, slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	log := slog.Default()
 
-	rec := NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, nil)
+	rec := NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, nil, nil)
 
 	_, err := rec.Reconcile(context.Background(), ctrl.Request{})
 	if err == nil {
@@ -712,7 +706,7 @@ func TestReadyzCheck(t *testing.T) {
 				makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{testAddr1},
-						Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 					},
 				}),
 			}
@@ -747,6 +741,110 @@ func TestReadyzCheck(t *testing.T) {
 	}
 }
 
+func TestReadyzCheck_BecomesUnhealthyAfterStaleTimeout(t *testing.T) {
+	eps := makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
+		{
+			Addresses:  []string{testAddr1},
+			Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
+		},
+	})
+
+	output := defaultOutput()
+	cfgPtr := newTestConfig([]config.OutputConfig{output})
+
+	applyFn := func(
+		_ context.Context,
+		_ client.WithWatch,
+		_ runtime.ApplyConfiguration,
+		_ ...client.ApplyOption,
+	) error {
+		return nil
+	}
+
+	rec := buildTestReconcilerWithInterceptor(
+		t,
+		[]client.Object{eps},
+		cfgPtr,
+		interceptor.Funcs{Apply: applyFn},
+	)
+
+	// Successful reconcile.
+	_, err := rec.Reconcile(context.Background(), ctrl.Request{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should be healthy right after.
+	if checkErr := rec.ReadyzCheck(&http.Request{}); checkErr != nil {
+		t.Fatalf("expected healthy after success, got: %v", checkErr)
+	}
+
+	// Simulate staleness by backdating lastSuccess.
+	rec.mu.Lock()
+	rec.lastSuccess = time.Now().Add(-stalenessThreshold - time.Minute)
+	rec.mu.Unlock()
+
+	checkErr := rec.ReadyzCheck(&http.Request{})
+	if checkErr == nil {
+		t.Fatal("expected unhealthy after stale timeout, got nil")
+	}
+
+	if !strings.Contains(checkErr.Error(), "stale") {
+		t.Errorf("error = %q, want it to contain %q", checkErr.Error(), "stale")
+	}
+}
+
+func TestReadyzCheck_RecoverAfterError(t *testing.T) {
+	eps := makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
+		{
+			Addresses:  []string{testAddr1},
+			Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
+		},
+	})
+
+	output := defaultOutput()
+	cfgPtr := newTestConfig([]config.OutputConfig{output})
+
+	failOnce := true
+
+	applyFn := func(
+		_ context.Context,
+		_ client.WithWatch,
+		_ runtime.ApplyConfiguration,
+		_ ...client.ApplyOption,
+	) error {
+		if failOnce {
+			failOnce = false
+			return errors.New("simulated failure")
+		}
+		return nil
+	}
+
+	rec := buildTestReconcilerWithInterceptor(
+		t,
+		[]client.Object{eps},
+		cfgPtr,
+		interceptor.Funcs{Apply: applyFn},
+	)
+
+	// First reconcile fails.
+	_, err := rec.Reconcile(context.Background(), ctrl.Request{})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	// Second reconcile succeeds.
+	_, err = rec.Reconcile(context.Background(), ctrl.Request{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should be healthy after recovery.
+	if checkErr := rec.ReadyzCheck(&http.Request{}); checkErr != nil {
+		t.Fatalf("expected healthy after recovery, got: %v", checkErr)
+	}
+}
+
 func TestBuildService(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -766,7 +864,7 @@ func TestBuildService(t *testing.T) {
 				Hostnames:        []string{testHostExample},
 				AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 				ServiceName:      "my-svc",
-				RecordTTL:        300,
+				RecordTTL:        new(300),
 			},
 			addresses:         []string{testAddr1},
 			wantName:          "my-svc",
@@ -783,7 +881,7 @@ func TestBuildService(t *testing.T) {
 				Hostnames:        []string{"foo.bar"},
 				AnnotationPrefix: "dns.test.io/",
 				ServiceName:      "svc-multi",
-				RecordTTL:        120,
+				RecordTTL:        new(120),
 			},
 			addresses:         []string{testAddr1, "10.0.0.2", "10.0.0.3"},
 			wantName:          "svc-multi",
@@ -800,7 +898,7 @@ func TestBuildService(t *testing.T) {
 				Hostnames:        []string{"a.com", "b.com"},
 				AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 				ServiceName:      "svc-hosts",
-				RecordTTL:        60,
+				RecordTTL:        new(60),
 			},
 			addresses:         []string{testAddr1},
 			wantName:          "svc-hosts",
@@ -817,7 +915,7 @@ func TestBuildService(t *testing.T) {
 				Hostnames:        []string{"test.io"},
 				AnnotationPrefix: "my-dns.io/",
 				ServiceName:      "svc-custom",
-				RecordTTL:        60,
+				RecordTTL:        new(60),
 			},
 			addresses:     []string{testAddr1},
 			wantName:      "svc-custom",
@@ -920,7 +1018,7 @@ func TestNewReconciler(t *testing.T) {
 
 	cfgPtr := newTestConfig([]config.OutputConfig{defaultOutput()})
 
-	rec := NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, nil)
+	rec := NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, nil, nil)
 
 	if rec == nil {
 		t.Fatal("NewReconciler returned nil")
@@ -946,7 +1044,7 @@ func TestNewReconciler(t *testing.T) {
 		t.Errorf("namespace = %q, want %q", rec.namespace, testSvcNamespace)
 	}
 
-	if rec.ready {
+	if !rec.lastSuccess.IsZero() {
 		t.Error("reconciler should not be ready initially")
 	}
 }
@@ -973,14 +1071,14 @@ func buildTestReconcilerWithInterceptor(
 	res := resolver.NewResolver(cli, slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	log := slog.Default()
 
-	return NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, nil)
+	return NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, nil, nil)
 }
 
 func TestReconcile_PartialOutputFailure(t *testing.T) {
 	eps := makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 		{
 			Addresses:  []string{testAddr1},
-			Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+			Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 		},
 	})
 
@@ -989,7 +1087,7 @@ func TestReconcile_PartialOutputFailure(t *testing.T) {
 		Hostnames:        []string{"a.example.com"},
 		AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 		ServiceName:      testSvcA,
-		RecordTTL:        60,
+		RecordTTL:        new(60),
 		AddressSource:    config.AddressSourceEndpointSlice,
 		AddressType:      config.AddressTypeIPv4,
 	}
@@ -999,7 +1097,7 @@ func TestReconcile_PartialOutputFailure(t *testing.T) {
 		Hostnames:        []string{"b.example.com"},
 		AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 		ServiceName:      testSvcB,
-		RecordTTL:        60,
+		RecordTTL:        new(60),
 		AddressSource:    config.AddressSourceEndpointSlice,
 		AddressType:      config.AddressTypeIPv4,
 	}
@@ -1082,7 +1180,7 @@ func TestReconcile_CustomAnnotationPrefix(t *testing.T) {
 	eps := makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 		{
 			Addresses:  []string{testAddr1},
-			Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+			Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 		},
 	})
 
@@ -1091,7 +1189,7 @@ func TestReconcile_CustomAnnotationPrefix(t *testing.T) {
 		Hostnames:        []string{"test.io"},
 		AnnotationPrefix: "my-dns.io/",
 		ServiceName:      "svc-custom",
-		RecordTTL:        60,
+		RecordTTL:        new(60),
 		AddressSource:    config.AddressSourceEndpointSlice,
 		AddressType:      config.AddressTypeIPv4,
 	}
@@ -1136,7 +1234,7 @@ func TestReconcile_ConfigHotReload(t *testing.T) {
 	eps := makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 		{
 			Addresses:  []string{testAddr1},
-			Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+			Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 		},
 	})
 
@@ -1151,7 +1249,7 @@ func TestReconcile_ConfigHotReload(t *testing.T) {
 				Hostnames:        []string{"a.com"},
 				AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 				ServiceName:      "svc-reload",
-				RecordTTL:        60,
+				RecordTTL:        new(60),
 				AddressSource:    config.AddressSourceEndpointSlice,
 				AddressType:      config.AddressTypeIPv4,
 			},
@@ -1191,7 +1289,7 @@ func TestReconcile_ConfigHotReload(t *testing.T) {
 				Hostnames:        []string{"b.com"},
 				AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 				ServiceName:      "svc-reload",
-				RecordTTL:        60,
+				RecordTTL:        new(60),
 				AddressSource:    config.AddressSourceEndpointSlice,
 				AddressType:      config.AddressTypeIPv4,
 			},
@@ -1230,7 +1328,7 @@ func TestReconcile_EndpointSliceDifferentNamespace(t *testing.T) {
 		Endpoints: []discoveryv1.Endpoint{
 			{
 				Addresses:  []string{testAddr1},
-				Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+				Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 			},
 		},
 	}
@@ -1267,7 +1365,7 @@ func TestReconcile_EndpointSliceDifferentServiceLabel(t *testing.T) {
 		Endpoints: []discoveryv1.Endpoint{
 			{
 				Addresses:  []string{testAddr1},
-				Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+				Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 			},
 		},
 	}
@@ -1293,7 +1391,7 @@ func TestReconcile_EmptyOutputs(t *testing.T) {
 	eps := makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 		{
 			Addresses:  []string{testAddr1},
-			Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+			Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 		},
 	})
 
@@ -1330,7 +1428,7 @@ func TestReconcile_LargeNumberOfAddresses(t *testing.T) {
 	for idx := range addressCount {
 		endpoints = append(endpoints, discoveryv1.Endpoint{
 			Addresses:  []string{fmt.Sprintf("10.0.%d.%d", idx/256, idx%256)},
-			Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+			Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 		})
 	}
 
@@ -1367,7 +1465,7 @@ func TestReconcile_SuccessSetsMetrics(t *testing.T) {
 	eps := makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 		{
 			Addresses:  []string{testAddr1},
-			Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+			Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 		},
 	})
 
@@ -1385,12 +1483,37 @@ func TestReconcile_SuccessSetsMetrics(t *testing.T) {
 		}
 
 		rec.mu.Lock()
-		ready := rec.ready
+		ready := !rec.lastSuccess.IsZero()
 		rec.mu.Unlock()
 
 		if !ready {
 			t.Errorf("reconcile %d: ready = false, want true", idx)
 		}
+	}
+}
+
+func TestReconcile_RecordsDuration(t *testing.T) {
+	eps := makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
+		{
+			Addresses:  []string{testAddr1},
+			Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
+		},
+	})
+
+	output := defaultOutput()
+
+	var applied []appliedService
+	cfgPtr := newTestConfig([]config.OutputConfig{output})
+	rec := buildTestReconciler(t, []client.Object{eps}, cfgPtr, &applied, nil)
+
+	_, err := rec.Reconcile(context.Background(), ctrl.Request{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	count := testutil.CollectAndCount(reconcileDuration)
+	if count == 0 {
+		t.Error("reconcileDuration histogram has no observations after successful reconcile")
 	}
 }
 
@@ -1400,7 +1523,7 @@ func TestReconcile_NodeInternalWithIPFallback(t *testing.T) {
 	eps := makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 		{
 			Addresses:  []string{"192.168.1.50"},
-			Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+			Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 			// No NodeName set.
 		},
 	})
@@ -1415,7 +1538,7 @@ func TestReconcile_NodeInternalWithIPFallback(t *testing.T) {
 		Hostnames:        []string{testHostExample},
 		AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 		ServiceName:      "svc-fallback",
-		RecordTTL:        60,
+		RecordTTL:        new(60),
 		AddressSource:    config.AddressSourceNodeInternal,
 		AddressType:      config.AddressTypeIPv4,
 	}
@@ -1443,8 +1566,8 @@ func TestReconcile_MultipleOutputsDifferentSources(t *testing.T) {
 	eps := makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 		{
 			Addresses:  []string{testAddr1},
-			Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
-			NodeName:   strPtr("node-1"),
+			Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
+			NodeName:   new("node-1"),
 		},
 	})
 
@@ -1458,7 +1581,7 @@ func TestReconcile_MultipleOutputsDifferentSources(t *testing.T) {
 		Hostnames:        []string{"eps.example.com"},
 		AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 		ServiceName:      "svc-eps",
-		RecordTTL:        60,
+		RecordTTL:        new(60),
 		AddressSource:    config.AddressSourceEndpointSlice,
 		AddressType:      config.AddressTypeIPv4,
 	}
@@ -1468,7 +1591,7 @@ func TestReconcile_MultipleOutputsDifferentSources(t *testing.T) {
 		Hostnames:        []string{"ext.example.com"},
 		AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 		ServiceName:      "svc-node-ext",
-		RecordTTL:        60,
+		RecordTTL:        new(60),
 		AddressSource:    config.AddressSourceNodeExternal,
 		AddressType:      config.AddressTypeIPv4,
 	}
@@ -1504,7 +1627,7 @@ func TestReconcile_ResolverError(t *testing.T) {
 	eps := makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 		{
 			Addresses:  []string{"10.244.0.5"},
-			Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+			Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 		},
 	})
 
@@ -1513,7 +1636,7 @@ func TestReconcile_ResolverError(t *testing.T) {
 		Hostnames:        []string{testHostExample},
 		AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 		ServiceName:      "svc-resolver-err",
-		RecordTTL:        60,
+		RecordTTL:        new(60),
 		AddressSource:    config.AddressSourceNodeInternal,
 		AddressType:      config.AddressTypeIPv4,
 	}
@@ -1557,7 +1680,7 @@ func TestReadyzCheck_ConcurrentAccess(t *testing.T) {
 	eps := makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 		{
 			Addresses:  []string{testAddr1},
-			Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+			Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 		},
 	})
 
@@ -1617,7 +1740,7 @@ func TestBuildService_ZeroTTL(t *testing.T) {
 		Hostnames:        []string{testHostExample},
 		AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 		ServiceName:      "svc-zero-ttl",
-		RecordTTL:        0,
+		RecordTTL:        new(0),
 	}
 
 	rec := &Reconciler{}
@@ -1647,7 +1770,7 @@ func TestBuildService_SingleHostname(t *testing.T) {
 		Hostnames:        []string{"only.example.com"},
 		AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 		ServiceName:      "svc-single",
-		RecordTTL:        60,
+		RecordTTL:        new(60),
 	}
 
 	rec := &Reconciler{}
@@ -1677,7 +1800,7 @@ func TestBuildService_EmptyAddresses(t *testing.T) {
 		Hostnames:        []string{testHostExample},
 		AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 		ServiceName:      "svc-empty",
-		RecordTTL:        60,
+		RecordTTL:        new(60),
 	}
 
 	rec := &Reconciler{}
@@ -1708,7 +1831,7 @@ func TestBuildService_ManagedByLabel(t *testing.T) {
 		Hostnames:        []string{testHostExample},
 		AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 		ServiceName:      "svc-label",
-		RecordTTL:        60,
+		RecordTTL:        new(60),
 	}
 
 	rec := &Reconciler{}
@@ -1730,7 +1853,7 @@ func TestBuildService_WithOwnerRef(t *testing.T) {
 		Kind:               "Deployment",
 		Name:               "kuberture",
 		UID:                types.UID("test-uid-12345"),
-		BlockOwnerDeletion: boolPtr(true),
+		BlockOwnerDeletion: new(true),
 	}
 
 	output := config.OutputConfig{
@@ -1738,7 +1861,7 @@ func TestBuildService_WithOwnerRef(t *testing.T) {
 		Hostnames:        []string{testHostExample},
 		AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 		ServiceName:      "svc-owner",
-		RecordTTL:        60,
+		RecordTTL:        new(60),
 	}
 
 	rec := &Reconciler{namespace: testSvcNamespace, ownerRef: ownerRef}
@@ -1781,7 +1904,7 @@ func TestBuildService_WithoutOwnerRef(t *testing.T) {
 		Hostnames:        []string{testHostExample},
 		AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 		ServiceName:      "svc-no-owner",
-		RecordTTL:        60,
+		RecordTTL:        new(60),
 	}
 
 	rec := &Reconciler{namespace: testSvcNamespace, ownerRef: nil}
@@ -1807,7 +1930,7 @@ func TestNewReconciler_WithOwnerRef(t *testing.T) {
 		UID:        types.UID("test-uid-456"),
 	}
 
-	rec := NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, ownerRef)
+	rec := NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, ownerRef, nil)
 
 	if rec.ownerRef != ownerRef {
 		t.Error("ownerRef not set correctly")
@@ -1824,7 +1947,7 @@ func TestReconcile_StaleServiceCleanup(t *testing.T) {
 	eps := makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 		{
 			Addresses:  []string{testAddr1},
-			Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+			Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 		},
 	})
 
@@ -1937,7 +2060,7 @@ func TestReconcile_NoStaleServiceCleanupWhenAllMatch(t *testing.T) {
 	eps := makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 		{
 			Addresses:  []string{testAddr1},
-			Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+			Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 		},
 	})
 
@@ -2003,7 +2126,7 @@ func TestReconcile_StaleCleanupDeleteError(t *testing.T) {
 	eps := makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 		{
 			Addresses:  []string{testAddr1},
-			Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+			Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 		},
 	})
 
@@ -2060,7 +2183,7 @@ func TestReconcile_EmptyOutputsCleansUpAllManagedServices(t *testing.T) {
 	eps := makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
 		{
 			Addresses:  []string{testAddr1},
-			Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+			Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 		},
 	})
 

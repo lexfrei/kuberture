@@ -9,8 +9,15 @@ metadata:
     {{- include "kuberture.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
   strategy:
+    {{- if gt (int .Values.replicaCount) 1 }}
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+    {{- else }}
     type: Recreate
+    {{- end }}
   selector:
     matchLabels:
       {{- include "kuberture.selectorLabels" . | nindent 6 }}
@@ -34,6 +41,8 @@ spec:
       serviceAccountName: {{ include "kuberture.serviceAccountName" . }}
       securityContext:
         runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
@@ -67,12 +76,20 @@ spec:
             httpGet:
               path: /readyz
               port: health
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            failureThreshold: 30
+            periodSeconds: 2
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           securityContext:
             runAsNonRoot: true
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
+            seccompProfile:
+              type: RuntimeDefault
             capabilities:
               drop:
                 - ALL

@@ -1,4 +1,5 @@
 replicaCount: 1
+revisionHistoryLimit: 3
 
 image:
   repository: ghcr.io/lexfrei/kuberture
@@ -28,6 +29,12 @@ resources:
     memory: 32Mi
   limits:
     memory: 64Mi
+
+pdb:
+  minAvailable: 1
+
+networkPolicy:
+  enabled: false
 
 nodeSelector: {}
 tolerations: []

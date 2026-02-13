@@ -6,11 +6,13 @@ import (
 	"flag"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -42,7 +44,8 @@ func main() {
 func run() error {
 	configPath, leaderElect, instanceName := parseFlags()
 
-	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+	logLevel := &slog.LevelVar{}
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel}))
 	ctrl.SetLogger(logr.FromSlogHandler(logger.Handler()))
 
 	logger.Info("kuberture starting",
@@ -54,6 +57,8 @@ func run() error {
 	if err != nil {
 		return errors.Wrap(err, "loading config")
 	}
+
+	logLevel.Set(config.ParseSlogLevel(cfg.LogLevel))
 
 	logger.Info("config loaded", slog.String("path", configPath))
 
@@ -77,6 +82,11 @@ func run() error {
 						podNamespace: {},
 					},
 				},
+				&discoveryv1.EndpointSlice{}: {
+					Namespaces: map[string]cache.Config{
+						cfg.Source.Namespace: {},
+					},
+				},
 			},
 		},
 	})
@@ -86,7 +96,10 @@ func run() error {
 
 	res := resolver.NewResolver(mgr.GetClient(), logger)
 
-	ownerRef, ownerErr := resolveOwnerDeployment(context.Background(), mgr.GetAPIReader(), podNamespace)
+	ownerCtx, ownerCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer ownerCancel()
+
+	ownerRef, ownerErr := resolveOwnerDeployment(ownerCtx, mgr.GetAPIReader(), podNamespace)
 	if ownerErr != nil {
 		logger.Warn("could not resolve owner deployment; managed Services will not have ownerReferences",
 			slog.String("error", ownerErr.Error()),
@@ -98,10 +111,17 @@ func run() error {
 		)
 	}
 
-	watcher, err := config.NewWatcher(configPath, cfg, logger)
+	signalCtx := ctrl.SetupSignalHandler()
+	watcherCtx, watcherCancel := context.WithCancel(signalCtx)
+
+	watcher, err := config.NewWatcher(configPath, cfg, logger, watcherCancel)
 	if err != nil {
+		watcherCancel()
+
 		return errors.Wrap(err, "creating config watcher")
 	}
+
+	watcher.SetLogLevelVar(logLevel)
 
 	defer func() {
 		if closeErr := watcher.Close(); closeErr != nil {
@@ -117,6 +137,7 @@ func run() error {
 		instanceName,
 		podNamespace,
 		ownerRef,
+		watcher.ReloadChannel(),
 	)
 
 	err = reconciler.SetupWithManager(mgr)
@@ -133,9 +154,6 @@ func run() error {
 	if err != nil {
 		return errors.Wrap(err, "adding readyz check")
 	}
-
-	signalCtx := ctrl.SetupSignalHandler()
-	watcherCtx, watcherCancel := context.WithCancel(signalCtx)
 
 	defer watcherCancel()
 

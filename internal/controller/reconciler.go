@@ -19,8 +19,10 @@ import (
 	applymetav1 "k8s.io/client-go/applyconfigurations/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/lexfrei/kuberture/internal/config"
 	"github.com/lexfrei/kuberture/internal/resolver"
@@ -35,6 +37,14 @@ const (
 	managedByLabel = "app.kubernetes.io/managed-by"
 	managedByValue = "kuberture"
 	instanceLabel  = "kuberture/instance"
+
+	// stalenessThreshold is how long since the last successful reconciliation
+	// before the readiness check reports unhealthy.
+	stalenessThreshold = 5 * time.Minute
+
+	// requeueInterval is how often the controller re-reconciles to prevent
+	// the readiness probe from going stale on quiet clusters.
+	requeueInterval = 2 * time.Minute
 )
 
 // Reconciler watches EndpointSlice and Node resources and maintains headless
@@ -47,13 +57,15 @@ type Reconciler struct {
 	instanceName string
 	namespace    string
 	ownerRef     *metav1.OwnerReference
+	reloadCh     <-chan struct{}
 
-	mu    sync.Mutex
-	ready bool
+	mu          sync.Mutex
+	lastSuccess time.Time
 }
 
 // NewReconciler creates a Reconciler with the given dependencies.
 // ownerRef may be nil when the owner Deployment cannot be resolved (e.g. dev mode).
+// reloadCh may be nil if config hot-reload triggering is not needed.
 func NewReconciler(
 	cli client.Client,
 	res *resolver.Resolver,
@@ -62,6 +74,7 @@ func NewReconciler(
 	instanceName string,
 	namespace string,
 	ownerRef *metav1.OwnerReference,
+	reloadCh <-chan struct{},
 ) *Reconciler {
 	return &Reconciler{
 		client:       cli,
@@ -71,6 +84,7 @@ func NewReconciler(
 		instanceName: instanceName,
 		namespace:    namespace,
 		ownerRef:     ownerRef,
+		reloadCh:     reloadCh,
 	}
 }
 
@@ -88,6 +102,8 @@ func newTriggerRequest() reconcile.Request {
 // EndpointSlice and Node resources. Filtering by service name is done
 // dynamically in Reconcile via the List call, so config hot-reload of
 // source.serviceName takes effect without restart.
+// If a reload channel was provided via NewReconciler, the controller also
+// triggers reconciliation when the config watcher signals a successful reload.
 func (rec *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	nodeHandler := handler.EnqueueRequestsFromMapFunc(
 		func(_ context.Context, _ client.Object) []reconcile.Request {
@@ -95,10 +111,38 @@ func (rec *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 		},
 	)
 
-	err := ctrl.NewControllerManagedBy(mgr).
+	builder := ctrl.NewControllerManagedBy(mgr).
 		For(&discoveryv1.EndpointSlice{}).
-		Watches(&corev1.Node{}, nodeHandler).
-		Complete(rec)
+		Watches(&corev1.Node{}, nodeHandler)
+
+	if rec.reloadCh != nil {
+		eventCh := make(chan event.GenericEvent, 1)
+
+		// This goroutine bridges reloadCh (struct{}) to eventCh (GenericEvent).
+		// It lives for the entire process lifetime because reloadCh is
+		// intentionally never closed (see watcher.go Close comment).
+		// Only one instance exists per controller, so the leak is harmless.
+		go func() {
+			for range rec.reloadCh {
+				select {
+				case eventCh <- event.GenericEvent{Object: &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: "config-reload"},
+				}}:
+				default:
+				}
+			}
+		}()
+
+		reloadHandler := handler.EnqueueRequestsFromMapFunc(
+			func(_ context.Context, _ client.Object) []reconcile.Request {
+				return []reconcile.Request{newTriggerRequest()}
+			},
+		)
+
+		builder = builder.WatchesRawSource(source.Channel(eventCh, reloadHandler))
+	}
+
+	err := builder.Complete(rec)
 
 	return errors.Wrap(err, "setting up controller")
 }
@@ -106,6 +150,8 @@ func (rec *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 // Reconcile resolves addresses from EndpointSlices and patches headless
 // Service objects for each configured output.
 func (rec *Reconciler) Reconcile(ctx context.Context, _ ctrl.Request) (ctrl.Result, error) {
+	start := time.Now()
+
 	cfg := rec.config.Load()
 
 	sliceList, err := rec.listEndpointSlices(ctx, cfg)
@@ -122,21 +168,28 @@ func (rec *Reconciler) Reconcile(ctx context.Context, _ ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, outputErr
 	}
 
+	reconcileDuration.Observe(time.Since(start).Seconds())
 	reconcileTotal.WithLabelValues("success").Inc()
 	lastReconcileTimestamp.Set(float64(time.Now().Unix()))
 	rec.markReady()
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: requeueInterval}, nil
 }
 
 // ReadyzCheck reports whether the controller has completed at least one
-// successful reconciliation.
+// successful reconciliation and has not become stale.
 func (rec *Reconciler) ReadyzCheck(_ *http.Request) error {
 	rec.mu.Lock()
 	defer rec.mu.Unlock()
 
-	if !rec.ready {
+	if rec.lastSuccess.IsZero() {
 		return errNotReconciled
+	}
+
+	since := time.Since(rec.lastSuccess)
+	if since > stalenessThreshold {
+		return errors.Newf("last successful reconciliation was %s ago (stale threshold: %s)",
+			since.Round(time.Second), stalenessThreshold)
 	}
 
 	return nil
@@ -239,7 +292,7 @@ func (rec *Reconciler) buildService(
 		WithAnnotations(map[string]string{
 			output.AnnotationPrefix + "hostname": strings.Join(output.Hostnames, ","),
 			output.AnnotationPrefix + "target":   strings.Join(addresses, ","),
-			output.AnnotationPrefix + "ttl":      strconv.Itoa(output.RecordTTL),
+			output.AnnotationPrefix + "ttl":      strconv.Itoa(*output.RecordTTL),
 		})
 
 	if rec.ownerRef != nil {
@@ -308,10 +361,10 @@ func (rec *Reconciler) cleanupStaleServices(ctx context.Context, cfg *config.Con
 	return errors.Join(errs...)
 }
 
-// markReady records that at least one reconciliation has succeeded.
+// markReady records that a reconciliation has succeeded.
 func (rec *Reconciler) markReady() {
 	rec.mu.Lock()
 	defer rec.mu.Unlock()
 
-	rec.ready = true
+	rec.lastSuccess = time.Now()
 }
