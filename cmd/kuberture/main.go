@@ -58,7 +58,7 @@ func run() error {
 		return errors.Wrap(err, "loading config")
 	}
 
-	setLogLevel(logLevel, cfg.LogLevel)
+	logLevel.Set(config.ParseSlogLevel(cfg.LogLevel))
 
 	logger.Info("config loaded", slog.String("path", configPath))
 
@@ -155,8 +155,6 @@ func run() error {
 		return errors.Wrap(err, "adding readyz check")
 	}
 
-	defer watcherCancel()
-
 	watcherErrCh := make(chan error, 1)
 
 	go func() {
@@ -243,20 +241,6 @@ func resolveOwnerDeployment(
 	}
 
 	return nil, errors.New("ReplicaSet has no Deployment owner")
-}
-
-// setLogLevel maps a config log level string to the corresponding slog.Level.
-func setLogLevel(logLevel *slog.LevelVar, level string) {
-	switch level {
-	case "debug":
-		logLevel.Set(slog.LevelDebug)
-	case "warn":
-		logLevel.Set(slog.LevelWarn)
-	case "error":
-		logLevel.Set(slog.LevelError)
-	default:
-		logLevel.Set(slog.LevelInfo)
-	}
 }
 
 // parseFlags parses CLI flags and environment variables, returning the config

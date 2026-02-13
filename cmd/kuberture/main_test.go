@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log/slog"
 	"strings"
 	"testing"
 
@@ -206,30 +205,5 @@ func TestResolveOwnerDeployment_PodNotFound(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "getting controller pod") {
 		t.Errorf("error = %q, want it to mention getting controller pod", err.Error())
-	}
-}
-
-func TestSetLogLevel_AllLevels(t *testing.T) {
-	tests := []struct {
-		level    string
-		expected slog.Level
-	}{
-		{"debug", slog.LevelDebug},
-		{"info", slog.LevelInfo},
-		{"warn", slog.LevelWarn},
-		{"error", slog.LevelError},
-		{"unknown", slog.LevelInfo},
-		{"", slog.LevelInfo},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.level, func(t *testing.T) {
-			lv := &slog.LevelVar{}
-			setLogLevel(lv, tc.level)
-
-			if lv.Level() != tc.expected {
-				t.Errorf("setLogLevel(%q) = %v, want %v", tc.level, lv.Level(), tc.expected)
-			}
-		})
 	}
 }

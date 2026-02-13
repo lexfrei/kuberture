@@ -819,3 +819,26 @@ func TestReload_LogsLogLevelChange(t *testing.T) {
 
 	cancel()
 }
+
+func TestParseSlogLevel_AllLevels(t *testing.T) {
+	tests := []struct {
+		level    string
+		expected slog.Level
+	}{
+		{"debug", slog.LevelDebug},
+		{"info", slog.LevelInfo},
+		{"warn", slog.LevelWarn},
+		{"error", slog.LevelError},
+		{"unknown", slog.LevelInfo},
+		{"", slog.LevelInfo},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.level, func(t *testing.T) {
+			got := ParseSlogLevel(tc.level)
+			if got != tc.expected {
+				t.Errorf("ParseSlogLevel(%q) = %v, want %v", tc.level, got, tc.expected)
+			}
+		})
+	}
+}

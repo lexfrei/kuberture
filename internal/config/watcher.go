@@ -192,8 +192,8 @@ func (w *Watcher) logConfigDiff(old, updated *Config) {
 	}
 }
 
-// parseSlogLevel maps a config log level string to the corresponding slog.Level.
-func parseSlogLevel(level string) slog.Level {
+// ParseSlogLevel maps a config log level string to the corresponding slog.Level.
+func ParseSlogLevel(level string) slog.Level {
 	switch level {
 	case logLevelDebug:
 		return slog.LevelDebug
@@ -222,6 +222,7 @@ func (w *Watcher) reload() {
 	old := w.config.Load()
 
 	if reason := restartReason(old, cfg); reason != "" {
+		configReloadTotal.WithLabelValues("restart").Inc()
 		w.log.Info("config change requires restart, shutting down gracefully",
 			slog.String("reason", reason),
 			slog.String("path", w.path),
@@ -237,7 +238,7 @@ func (w *Watcher) reload() {
 	w.config.Store(cfg)
 
 	if w.logLevelVar != nil && old.LogLevel != cfg.LogLevel {
-		w.logLevelVar.Set(parseSlogLevel(cfg.LogLevel))
+		w.logLevelVar.Set(ParseSlogLevel(cfg.LogLevel))
 	}
 
 	w.log.Info("config reloaded successfully", slog.String("path", w.path))
