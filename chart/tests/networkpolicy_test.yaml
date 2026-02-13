@@ -32,3 +32,14 @@ tests:
       - contains:
           path: spec.policyTypes
           content: Egress
+      # Verify DNS egress is present (required for Kubernetes API service resolution)
+      - contains:
+          path: spec.egress[0].ports
+          content:
+            port: 53
+            protocol: UDP
+      - contains:
+          path: spec.egress[0].ports
+          content:
+            port: 53
+            protocol: TCP
