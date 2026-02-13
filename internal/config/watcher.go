@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"sync/atomic"
 	"time"
@@ -17,6 +18,7 @@ type Watcher struct {
 	config    *atomic.Pointer[Config]
 	log       *slog.Logger
 	fsWatcher *fsnotify.Watcher
+	exitFunc  func(int) // overridable for testing; defaults to os.Exit
 }
 
 // NewWatcher creates a config file watcher with the given initial config.
@@ -43,6 +45,7 @@ func NewWatcher(path string, initial *Config, log *slog.Logger) (*Watcher, error
 		config:    ptr,
 		log:       log,
 		fsWatcher: fsw,
+		exitFunc:  os.Exit,
 	}, nil
 }
 
@@ -100,6 +103,28 @@ func (w *Watcher) Run(ctx context.Context) error {
 	}
 }
 
+// restartReason returns a non-empty string describing the first field that
+// changed and requires a process restart, or "" if a hot-reload is sufficient.
+func (w *Watcher) restartReason(old, new *Config) string {
+	if old.MetricsBindAddress != new.MetricsBindAddress {
+		return "metricsBindAddress changed"
+	}
+
+	if old.HealthProbeBindAddress != new.HealthProbeBindAddress {
+		return "healthProbeBindAddress changed"
+	}
+
+	if old.Source.Namespace != new.Source.Namespace {
+		return "source.namespace changed"
+	}
+
+	if old.Source.ServiceName != new.Source.ServiceName {
+		return "source.serviceName changed"
+	}
+
+	return ""
+}
+
 func isReloadEvent(evt fsnotify.Event) bool {
 	return evt.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove) != 0
 }
@@ -113,32 +138,16 @@ func (w *Watcher) reload() {
 	}
 
 	old := w.config.Load()
-	if old.MetricsBindAddress != cfg.MetricsBindAddress {
-		w.log.Warn("metricsBindAddress changed but requires restart to take effect",
-			slog.String("old", old.MetricsBindAddress),
-			slog.String("new", cfg.MetricsBindAddress),
-		)
-	}
 
-	if old.HealthProbeBindAddress != cfg.HealthProbeBindAddress {
-		w.log.Warn("healthProbeBindAddress changed but requires restart to take effect",
-			slog.String("old", old.HealthProbeBindAddress),
-			slog.String("new", cfg.HealthProbeBindAddress),
+	if reason := w.restartReason(old, cfg); reason != "" {
+		w.log.Info("config change requires restart, exiting gracefully",
+			slog.String("reason", reason),
+			slog.String("path", w.path),
 		)
-	}
 
-	if old.Source.Namespace != cfg.Source.Namespace {
-		w.log.Warn("source.namespace changed but requires restart to take effect",
-			slog.String("old", old.Source.Namespace),
-			slog.String("new", cfg.Source.Namespace),
-		)
-	}
+		w.exitFunc(0)
 
-	if old.Source.ServiceName != cfg.Source.ServiceName {
-		w.log.Warn("source.serviceName changed but requires restart to take effect",
-			slog.String("old", old.Source.ServiceName),
-			slog.String("new", cfg.Source.ServiceName),
-		)
+		return
 	}
 
 	w.config.Store(cfg)

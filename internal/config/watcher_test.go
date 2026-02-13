@@ -345,7 +345,7 @@ func newCapturingLogger(buf *bytes.Buffer) *slog.Logger {
 	return slog.New(slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 }
 
-func TestReload_WarnsOnSourceNamespaceChange(t *testing.T) {
+func TestReload_ExitsOnSourceNamespaceChange(t *testing.T) {
 	initialYAML := `
 source:
   namespace: kube-system
@@ -380,6 +380,9 @@ outputs:
 
 	defer watcher.Close()
 
+	exitCalled := make(chan int, 1)
+	watcher.exitFunc = func(code int) { exitCalled <- code }
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -394,26 +397,23 @@ outputs:
 		t.Fatalf("writing updated config: %v", writeErr)
 	}
 
-	deadline := time.After(2 * time.Second)
-	ticker := time.NewTicker(50 * time.Millisecond)
-
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-deadline:
-			t.Fatalf("timed out waiting for source namespace warning; log output:\n%s", logBuf.String())
-		case <-ticker.C:
-			if strings.Contains(logBuf.String(), "source.namespace changed") {
-				cancel()
-
-				return
-			}
+	select {
+	case code := <-exitCalled:
+		if code != 0 {
+			t.Errorf("exit code = %d, want 0", code)
 		}
+	case <-time.After(2 * time.Second):
+		t.Fatalf("timed out waiting for exit call; log output:\n%s", logBuf.String())
 	}
+
+	if !strings.Contains(logBuf.String(), "source.namespace changed") {
+		t.Errorf("log output missing reason; got:\n%s", logBuf.String())
+	}
+
+	cancel()
 }
 
-func TestReload_WarnsOnSourceServiceNameChange(t *testing.T) {
+func TestReload_ExitsOnSourceServiceNameChange(t *testing.T) {
 	initialYAML := `
 source:
   namespace: default
@@ -448,6 +448,9 @@ outputs:
 
 	defer watcher.Close()
 
+	exitCalled := make(chan int, 1)
+	watcher.exitFunc = func(code int) { exitCalled <- code }
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -462,21 +465,18 @@ outputs:
 		t.Fatalf("writing updated config: %v", writeErr)
 	}
 
-	deadline := time.After(2 * time.Second)
-	ticker := time.NewTicker(50 * time.Millisecond)
-
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-deadline:
-			t.Fatalf("timed out waiting for source serviceName warning; log output:\n%s", logBuf.String())
-		case <-ticker.C:
-			if strings.Contains(logBuf.String(), "source.serviceName changed") {
-				cancel()
-
-				return
-			}
+	select {
+	case code := <-exitCalled:
+		if code != 0 {
+			t.Errorf("exit code = %d, want 0", code)
 		}
+	case <-time.After(2 * time.Second):
+		t.Fatalf("timed out waiting for exit call; log output:\n%s", logBuf.String())
 	}
+
+	if !strings.Contains(logBuf.String(), "source.serviceName changed") {
+		t.Errorf("log output missing reason; got:\n%s", logBuf.String())
+	}
+
+	cancel()
 }
