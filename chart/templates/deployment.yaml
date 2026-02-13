@@ -44,6 +44,10 @@ spec:
           env:
             - name: KUBERTURE_INSTANCE
               value: {{ include "kuberture.fullname" . | quote }}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
             - name: POD_NAMESPACE
               valueFrom:
                 fieldRef:

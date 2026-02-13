@@ -1,0 +1,6 @@
+config:
+  outputs:
+    - name: default
+      hostname:
+        - test.example.com
+      serviceName: kuberture-test

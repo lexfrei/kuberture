@@ -7,6 +7,8 @@ templates:
 release:
   name: kuberture
   namespace: default
+values:
+  - test-values.yaml
 tests:
   - it: ClusterRole should have correct kind and apiVersion
     template: templates/clusterrole.yaml
@@ -111,6 +113,33 @@ tests:
             apiGroups: [""]
             resources: ["events"]
             verbs: ["create", "patch"]
+
+  - it: Role should have pods rule for owner resolution
+    template: templates/role.yaml
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: [""]
+            resources: ["pods"]
+            verbs: ["get"]
+
+  - it: Role should have replicasets rule for owner resolution
+    template: templates/role.yaml
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["apps"]
+            resources: ["replicasets"]
+            verbs: ["get"]
+
+  - it: Role should have correct number of rules
+    template: templates/role.yaml
+    asserts:
+      - lengthEqual:
+          path: rules
+          count: 5
 
   - it: RoleBinding should have correct kind and apiVersion
     template: templates/rolebinding.yaml
