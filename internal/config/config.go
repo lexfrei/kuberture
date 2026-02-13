@@ -82,6 +82,57 @@ func isValidDNSLabel(name string) bool {
 	return true
 }
 
+// isValidHostname checks whether h is a valid DNS hostname per RFC 952/1123.
+// It accepts optional wildcard prefix (*.example.com) and trailing dot.
+// Requires at least two labels (e.g. "example.com", not "localhost").
+func isValidHostname(h string) bool {
+	if h == "" {
+		return false
+	}
+
+	// Strip optional trailing dot.
+	check := strings.TrimSuffix(h, ".")
+
+	// Total length limit: 253 characters.
+	const maxHostnameLen = 253
+	if len(check) > maxHostnameLen {
+		return false
+	}
+
+	// Handle wildcard prefix.
+	if strings.HasPrefix(check, "*.") {
+		check = check[2:]
+	} else if strings.Contains(check, "*") {
+		return false
+	}
+
+	labels := strings.Split(check, ".")
+	if len(labels) < 2 {
+		return false
+	}
+
+	const maxLabelLen = 63
+
+	for _, label := range labels {
+		if label == "" || len(label) > maxLabelLen {
+			return false
+		}
+
+		if label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+
+		for _, ch := range label {
+			if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+				(ch >= '0' && ch <= '9') || ch == '-') {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
 // Config is the top-level configuration for the kuberture controller.
 type Config struct {
 	Source                 SourceConfig   `yaml:"source"`
@@ -213,6 +264,15 @@ func validateSingleOutput(out *OutputConfig) error {
 			errors.New("at least one hostname is required"),
 			"output "+out.Name,
 		)
+	}
+
+	for _, h := range out.Hostnames {
+		if !isValidHostname(h) {
+			return errors.Wrapf(
+				errors.Newf("invalid hostname %q", h),
+				"output %s", out.Name,
+			)
+		}
 	}
 
 	if out.ServiceName == "" {

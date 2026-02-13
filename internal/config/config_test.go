@@ -585,8 +585,9 @@ outputs:
 	}
 }
 
-func TestLoad_VeryLongHostname(t *testing.T) {
-	longHostname := strings.Repeat("a", 253) + ".example.com"
+func TestLoad_LongButValidHostname(t *testing.T) {
+	// 63-char label + ".example.com" = 75 chars, well within 253 limit.
+	longHostname := strings.Repeat("a", 63) + ".example.com"
 	cfgYAML := `
 outputs:
   - name: long-host
@@ -601,6 +602,25 @@ outputs:
 
 	if cfg.Outputs[0].Hostnames[0] != longHostname {
 		t.Errorf("hostname length = %d, want %d", len(cfg.Outputs[0].Hostnames[0]), len(longHostname))
+	}
+}
+
+func TestLoad_TooLongHostnameRejected(t *testing.T) {
+	longHostname := strings.Repeat("a", 253) + ".example.com"
+	cfgYAML := `
+outputs:
+  - name: long-host
+    hostname: [` + longHostname + `]
+    serviceName: svc
+`
+
+	_, err := Load(writeTestConfig(t, cfgYAML))
+	if err == nil {
+		t.Fatal("expected error for hostname exceeding 253 characters, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "invalid hostname") {
+		t.Errorf("error = %q, want substring %q", err.Error(), "invalid hostname")
 	}
 }
 
