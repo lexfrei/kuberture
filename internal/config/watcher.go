@@ -18,7 +18,7 @@ type Watcher struct {
 	log        *slog.Logger
 	fsWatcher  *fsnotify.Watcher
 	cancelFunc context.CancelFunc // called when a restart-requiring change is detected
-	reloadCh   chan struct{}       // signals successful config reloads
+	reloadCh   chan struct{}      // signals successful config reloads
 }
 
 // NewWatcher creates a config file watcher with the given initial config.
