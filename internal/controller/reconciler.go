@@ -16,6 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	applycorev1 "k8s.io/client-go/applyconfigurations/core/v1"
+	applymetav1 "k8s.io/client-go/applyconfigurations/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -45,12 +46,14 @@ type Reconciler struct {
 	log          *slog.Logger
 	instanceName string
 	namespace    string
+	ownerRef     *metav1.OwnerReference
 
 	mu    sync.Mutex
 	ready bool
 }
 
 // NewReconciler creates a Reconciler with the given dependencies.
+// ownerRef may be nil when the owner Deployment cannot be resolved (e.g. dev mode).
 func NewReconciler(
 	cli client.Client,
 	res *resolver.Resolver,
@@ -58,6 +61,7 @@ func NewReconciler(
 	log *slog.Logger,
 	instanceName string,
 	namespace string,
+	ownerRef *metav1.OwnerReference,
 ) *Reconciler {
 	return &Reconciler{
 		client:       cli,
@@ -66,6 +70,7 @@ func NewReconciler(
 		log:          log,
 		instanceName: instanceName,
 		namespace:    namespace,
+		ownerRef:     ownerRef,
 	}
 }
 
@@ -226,7 +231,7 @@ func (rec *Reconciler) buildService(
 	output *config.OutputConfig,
 	addresses []string,
 ) *applycorev1.ServiceApplyConfiguration {
-	return applycorev1.Service(output.ServiceName, rec.namespace).
+	svc := applycorev1.Service(output.ServiceName, rec.namespace).
 		WithLabels(map[string]string{
 			managedByLabel: managedByValue,
 			instanceLabel:  rec.instanceName,
@@ -235,11 +240,23 @@ func (rec *Reconciler) buildService(
 			output.AnnotationPrefix + "hostname": strings.Join(output.Hostnames, ","),
 			output.AnnotationPrefix + "target":   strings.Join(addresses, ","),
 			output.AnnotationPrefix + "ttl":      strconv.Itoa(output.RecordTTL),
-		}).
-		WithSpec(applycorev1.ServiceSpec().
-			WithType(corev1.ServiceTypeClusterIP).
-			WithClusterIP(corev1.ClusterIPNone),
+		})
+
+	if rec.ownerRef != nil {
+		svc = svc.WithOwnerReferences(
+			applymetav1.OwnerReference().
+				WithAPIVersion(rec.ownerRef.APIVersion).
+				WithKind(rec.ownerRef.Kind).
+				WithName(rec.ownerRef.Name).
+				WithUID(rec.ownerRef.UID).
+				WithBlockOwnerDeletion(true),
 		)
+	}
+
+	return svc.WithSpec(applycorev1.ServiceSpec().
+		WithType(corev1.ServiceTypeClusterIP).
+		WithClusterIP(corev1.ClusterIPNone),
+	)
 }
 
 // cleanupStaleServices removes Services with the managed-by label that no
