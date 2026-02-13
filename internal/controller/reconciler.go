@@ -19,8 +19,10 @@ import (
 	applymetav1 "k8s.io/client-go/applyconfigurations/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/lexfrei/kuberture/internal/config"
 	"github.com/lexfrei/kuberture/internal/resolver"
@@ -47,6 +49,7 @@ type Reconciler struct {
 	instanceName string
 	namespace    string
 	ownerRef     *metav1.OwnerReference
+	reloadCh     <-chan struct{}
 
 	mu    sync.Mutex
 	ready bool
@@ -54,6 +57,7 @@ type Reconciler struct {
 
 // NewReconciler creates a Reconciler with the given dependencies.
 // ownerRef may be nil when the owner Deployment cannot be resolved (e.g. dev mode).
+// reloadCh may be nil if config hot-reload triggering is not needed.
 func NewReconciler(
 	cli client.Client,
 	res *resolver.Resolver,
@@ -62,6 +66,7 @@ func NewReconciler(
 	instanceName string,
 	namespace string,
 	ownerRef *metav1.OwnerReference,
+	reloadCh <-chan struct{},
 ) *Reconciler {
 	return &Reconciler{
 		client:       cli,
@@ -71,6 +76,7 @@ func NewReconciler(
 		instanceName: instanceName,
 		namespace:    namespace,
 		ownerRef:     ownerRef,
+		reloadCh:     reloadCh,
 	}
 }
 
@@ -88,6 +94,8 @@ func newTriggerRequest() reconcile.Request {
 // EndpointSlice and Node resources. Filtering by service name is done
 // dynamically in Reconcile via the List call, so config hot-reload of
 // source.serviceName takes effect without restart.
+// If a reload channel was provided via NewReconciler, the controller also
+// triggers reconciliation when the config watcher signals a successful reload.
 func (rec *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	nodeHandler := handler.EnqueueRequestsFromMapFunc(
 		func(_ context.Context, _ client.Object) []reconcile.Request {
@@ -95,10 +103,31 @@ func (rec *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 		},
 	)
 
-	err := ctrl.NewControllerManagedBy(mgr).
+	builder := ctrl.NewControllerManagedBy(mgr).
 		For(&discoveryv1.EndpointSlice{}).
-		Watches(&corev1.Node{}, nodeHandler).
-		Complete(rec)
+		Watches(&corev1.Node{}, nodeHandler)
+
+	if rec.reloadCh != nil {
+		eventCh := make(chan event.GenericEvent, 1)
+
+		go func() {
+			for range rec.reloadCh {
+				eventCh <- event.GenericEvent{Object: &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: "config-reload"},
+				}}
+			}
+		}()
+
+		reloadHandler := handler.EnqueueRequestsFromMapFunc(
+			func(_ context.Context, _ client.Object) []reconcile.Request {
+				return []reconcile.Request{newTriggerRequest()}
+			},
+		)
+
+		builder = builder.WatchesRawSource(source.Channel(eventCh, reloadHandler))
+	}
+
+	err := builder.Complete(rec)
 
 	return errors.Wrap(err, "setting up controller")
 }

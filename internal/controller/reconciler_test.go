@@ -194,7 +194,7 @@ func buildTestReconciler(
 	res := resolver.NewResolver(cli, slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	log := slog.Default()
 
-	return NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, nil)
+	return NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, nil, nil)
 }
 
 func TestReconcile(t *testing.T) {
@@ -673,7 +673,7 @@ func TestReconcile_ErrorListingEndpointSlices(t *testing.T) {
 	res := resolver.NewResolver(cli, slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	log := slog.Default()
 
-	rec := NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, nil)
+	rec := NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, nil, nil)
 
 	_, err := rec.Reconcile(context.Background(), ctrl.Request{})
 	if err == nil {
@@ -920,7 +920,7 @@ func TestNewReconciler(t *testing.T) {
 
 	cfgPtr := newTestConfig([]config.OutputConfig{defaultOutput()})
 
-	rec := NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, nil)
+	rec := NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, nil, nil)
 
 	if rec == nil {
 		t.Fatal("NewReconciler returned nil")
@@ -973,7 +973,7 @@ func buildTestReconcilerWithInterceptor(
 	res := resolver.NewResolver(cli, slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	log := slog.Default()
 
-	return NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, nil)
+	return NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, nil, nil)
 }
 
 func TestReconcile_PartialOutputFailure(t *testing.T) {
@@ -1807,7 +1807,7 @@ func TestNewReconciler_WithOwnerRef(t *testing.T) {
 		UID:        types.UID("test-uid-456"),
 	}
 
-	rec := NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, ownerRef)
+	rec := NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, ownerRef, nil)
 
 	if rec.ownerRef != ownerRef {
 		t.Error("ownerRef not set correctly")
