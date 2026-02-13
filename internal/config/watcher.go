@@ -151,6 +151,7 @@ func isReloadEvent(evt fsnotify.Event) bool {
 func (w *Watcher) reload() {
 	cfg, err := Load(w.path)
 	if err != nil {
+		configReloadTotal.WithLabelValues("error").Inc()
 		w.log.Error("failed to reload config", slog.String("error", err.Error()))
 
 		return
@@ -169,6 +170,7 @@ func (w *Watcher) reload() {
 		return
 	}
 
+	configReloadTotal.WithLabelValues("success").Inc()
 	w.config.Store(cfg)
 	w.log.Info("config reloaded successfully", slog.String("path", w.path))
 

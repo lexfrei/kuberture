@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
 const (
@@ -557,6 +559,93 @@ func TestWatcher_ReloadChannel_NoSendOnError(t *testing.T) {
 		t.Fatal("received reload signal after invalid config write, expected none")
 	default:
 		// No signal — correct behavior.
+	}
+
+	cancel()
+}
+
+func TestReload_IncrementsSuccessMetric(t *testing.T) {
+	path := writeTestConfig(t, validYAML)
+	initial := loadInitialConfig(t, path)
+	log := newTestLogger()
+
+	before := testutil.ToFloat64(configReloadTotal.WithLabelValues("success"))
+
+	watcher, err := NewWatcher(path, initial, log, noopCancel)
+	if err != nil {
+		t.Fatalf("unexpected error creating watcher: %v", err)
+	}
+
+	defer watcher.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		_ = watcher.Run(ctx)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+
+	writeErr := os.WriteFile(path, []byte(updatedYAML), 0o600)
+	if writeErr != nil {
+		t.Fatalf("writing updated config: %v", writeErr)
+	}
+
+	deadline := time.After(2 * time.Second)
+	ticker := time.NewTicker(50 * time.Millisecond)
+
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for config reload success metric increment")
+		case <-ticker.C:
+			after := testutil.ToFloat64(configReloadTotal.WithLabelValues("success"))
+			if after > before {
+				cancel()
+
+				return
+			}
+		}
+	}
+}
+
+func TestReload_IncrementsErrorMetric(t *testing.T) {
+	path := writeTestConfig(t, validYAML)
+	initial := loadInitialConfig(t, path)
+	log := newTestLogger()
+
+	before := testutil.ToFloat64(configReloadTotal.WithLabelValues("error"))
+
+	watcher, err := NewWatcher(path, initial, log, noopCancel)
+	if err != nil {
+		t.Fatalf("unexpected error creating watcher: %v", err)
+	}
+
+	defer watcher.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		_ = watcher.Run(ctx)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+
+	writeErr := os.WriteFile(path, []byte(invalidYAML), 0o600)
+	if writeErr != nil {
+		t.Fatalf("writing invalid config: %v", writeErr)
+	}
+
+	// Wait for debounce + processing.
+	time.Sleep(300 * time.Millisecond)
+
+	after := testutil.ToFloat64(configReloadTotal.WithLabelValues("error"))
+	if after <= before {
+		t.Errorf("error counter did not increment: before=%f, after=%f", before, after)
 	}
 
 	cancel()
