@@ -7,6 +7,13 @@ import (
 	"testing"
 )
 
+const minimalValidConfig = `
+outputs:
+  - name: test
+    hostname: [test.com]
+    serviceName: svc
+`
+
 func writeTestConfig(t *testing.T, content string) string {
 	t.Helper()
 
@@ -77,8 +84,8 @@ outputs:
 		t.Errorf("annotationPrefix = %q, want custom.io/", out.AnnotationPrefix)
 	}
 
-	if out.RecordTTL != 300 {
-		t.Errorf("recordTTL = %d, want 300", out.RecordTTL)
+	if *out.RecordTTL != 300 {
+		t.Errorf("recordTTL = %d, want 300", *out.RecordTTL)
 	}
 
 	if out.AddressSource != "node-external" {
@@ -124,8 +131,8 @@ outputs:
 		t.Errorf("annotationPrefix = %q, want external-dns.alpha.kubernetes.io/", out.AnnotationPrefix)
 	}
 
-	if out.RecordTTL != 60 {
-		t.Errorf("recordTTL = %d, want 60", out.RecordTTL)
+	if *out.RecordTTL != 60 {
+		t.Errorf("recordTTL = %d, want 60", *out.RecordTTL)
 	}
 
 	if out.AddressSource != "endpointslice" {
@@ -297,8 +304,8 @@ outputs:
 		t.Fatal("expected error for negative recordTTL, got nil")
 	}
 
-	if !strings.Contains(err.Error(), "recordTTL must be between 1 and") {
-		t.Errorf("error = %q, want substring %q", err.Error(), "recordTTL must be between 1 and")
+	if !strings.Contains(err.Error(), "recordTTL must be between 0 and") {
+		t.Errorf("error = %q, want substring %q", err.Error(), "recordTTL must be between 0 and")
 	}
 }
 
@@ -316,8 +323,8 @@ outputs:
 		t.Fatal("expected error for excessive recordTTL, got nil")
 	}
 
-	if !strings.Contains(err.Error(), "recordTTL must be between 1 and") {
-		t.Errorf("error = %q, want substring %q", err.Error(), "recordTTL must be between 1 and")
+	if !strings.Contains(err.Error(), "recordTTL must be between 0 and") {
+		t.Errorf("error = %q, want substring %q", err.Error(), "recordTTL must be between 0 and")
 	}
 }
 
@@ -335,12 +342,12 @@ outputs:
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if cfg.Outputs[0].RecordTTL != 86400 {
-		t.Errorf("recordTTL = %d, want 86400", cfg.Outputs[0].RecordTTL)
+	if *cfg.Outputs[0].RecordTTL != 86400 {
+		t.Errorf("recordTTL = %d, want 86400", *cfg.Outputs[0].RecordTTL)
 	}
 }
 
-func TestLoad_ZeroRecordTTLGetsDefault(t *testing.T) {
+func TestLoad_NilRecordTTLGetsDefault(t *testing.T) {
 	cfgYAML := `
 outputs:
   - name: default-ttl
@@ -353,8 +360,31 @@ outputs:
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if cfg.Outputs[0].RecordTTL != 60 {
-		t.Errorf("recordTTL = %d, want 60 (default)", cfg.Outputs[0].RecordTTL)
+	if *cfg.Outputs[0].RecordTTL != 60 {
+		t.Errorf("recordTTL = %d, want 60 (default)", *cfg.Outputs[0].RecordTTL)
+	}
+}
+
+func TestLoad_ExplicitTTLZeroIsPreserved(t *testing.T) {
+	cfgYAML := `
+outputs:
+  - name: zero-ttl
+    hostname: [test.com]
+    serviceName: svc
+    recordTTL: 0
+`
+
+	cfg, err := Load(writeTestConfig(t, cfgYAML))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if cfg.Outputs[0].RecordTTL == nil {
+		t.Fatal("recordTTL is nil, want 0")
+	}
+
+	if *cfg.Outputs[0].RecordTTL != 0 {
+		t.Errorf("recordTTL = %d, want 0", *cfg.Outputs[0].RecordTTL)
 	}
 }
 
@@ -400,8 +430,8 @@ outputs:
 		t.Errorf("outputs[2] hostnames count = %d, want 2", len(cfg.Outputs[2].Hostnames))
 	}
 
-	if cfg.Outputs[2].RecordTTL != 120 {
-		t.Errorf("outputs[2].RecordTTL = %d, want 120", cfg.Outputs[2].RecordTTL)
+	if *cfg.Outputs[2].RecordTTL != 120 {
+		t.Errorf("outputs[2].RecordTTL = %d, want 120", *cfg.Outputs[2].RecordTTL)
 	}
 
 	if cfg.Outputs[2].AddressSource != "node-internal" {
@@ -464,14 +494,7 @@ outputs:
 }
 
 func TestLoad_SourceDefaults(t *testing.T) {
-	cfgYAML := `
-outputs:
-  - name: test
-    hostname: [test.com]
-    serviceName: svc
-`
-
-	cfg, err := Load(writeTestConfig(t, cfgYAML))
+	cfg, err := Load(writeTestConfig(t, minimalValidConfig))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -677,14 +700,7 @@ outputs:
 }
 
 func TestApplyDefaults_LogLevel(t *testing.T) {
-	cfgYAML := `
-outputs:
-  - name: test
-    hostname: [test.com]
-    serviceName: svc
-`
-
-	cfg, err := Load(writeTestConfig(t, cfgYAML))
+	cfg, err := Load(writeTestConfig(t, minimalValidConfig))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

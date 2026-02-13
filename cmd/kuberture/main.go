@@ -244,16 +244,16 @@ func resolveOwnerDeployment(
 }
 
 // setLogLevel maps a config log level string to the corresponding slog.Level.
-func setLogLevel(lv *slog.LevelVar, level string) {
+func setLogLevel(logLevel *slog.LevelVar, level string) {
 	switch level {
 	case "debug":
-		lv.Set(slog.LevelDebug)
+		logLevel.Set(slog.LevelDebug)
 	case "warn":
-		lv.Set(slog.LevelWarn)
+		logLevel.Set(slog.LevelWarn)
 	case "error":
-		lv.Set(slog.LevelError)
+		logLevel.Set(slog.LevelError)
 	default:
-		lv.Set(slog.LevelInfo)
+		logLevel.Set(slog.LevelInfo)
 	}
 }
 

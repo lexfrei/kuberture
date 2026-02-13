@@ -60,6 +60,10 @@ func strPtr(val string) *string {
 	return &val
 }
 
+func intPtr(val int) *int {
+	return &val
+}
+
 func newTestScheme(t *testing.T) *runtime.Scheme {
 	t.Helper()
 
@@ -122,7 +126,7 @@ func defaultOutput() config.OutputConfig {
 		Hostnames:        []string{testHostExample},
 		AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 		ServiceName:      testSvcDefault,
-		RecordTTL:        60,
+		RecordTTL:        intPtr(60),
 		AddressSource:    config.AddressSourceEndpointSlice,
 		AddressType:      config.AddressTypeIPv4,
 	}
@@ -397,7 +401,7 @@ func TestReconcile(t *testing.T) {
 					Hostnames:        []string{testHostExample},
 					AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 					ServiceName:      "kuberture-v6",
-					RecordTTL:        60,
+					RecordTTL:        intPtr(60),
 					AddressSource:    config.AddressSourceEndpointSlice,
 					AddressType:      config.AddressTypeIPv6,
 				},
@@ -427,7 +431,7 @@ func TestReconcile(t *testing.T) {
 					Hostnames:        []string{"a.example.com"},
 					AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 					ServiceName:      testSvcA,
-					RecordTTL:        120,
+					RecordTTL:        intPtr(120),
 					AddressSource:    config.AddressSourceEndpointSlice,
 					AddressType:      config.AddressTypeIPv4,
 				},
@@ -436,7 +440,7 @@ func TestReconcile(t *testing.T) {
 					Hostnames:        []string{"b.example.com"},
 					AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 					ServiceName:      testSvcB,
-					RecordTTL:        300,
+					RecordTTL:        intPtr(300),
 					AddressSource:    config.AddressSourceEndpointSlice,
 					AddressType:      config.AddressTypeIPv4,
 				},
@@ -485,7 +489,7 @@ func TestReconcile(t *testing.T) {
 					Hostnames:        []string{testHostExample},
 					AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 					ServiceName:      "kuberture-ni",
-					RecordTTL:        60,
+					RecordTTL:        intPtr(60),
 					AddressSource:    config.AddressSourceNodeInternal,
 					AddressType:      config.AddressTypeIPv4,
 				},
@@ -520,7 +524,7 @@ func TestReconcile(t *testing.T) {
 					Hostnames:        []string{testHostExample},
 					AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 					ServiceName:      "kuberture-ne",
-					RecordTTL:        60,
+					RecordTTL:        intPtr(60),
 					AddressSource:    config.AddressSourceNodeExternal,
 					AddressType:      config.AddressTypeIPv4,
 				},
@@ -555,7 +559,7 @@ func TestReconcile(t *testing.T) {
 					Hostnames:        []string{testHostExample},
 					AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 					ServiceName:      "kuberture-np",
-					RecordTTL:        60,
+					RecordTTL:        intPtr(60),
 					AddressSource:    config.AddressSourceNodePublic,
 					AddressType:      config.AddressTypeIPv4,
 				},
@@ -585,7 +589,7 @@ func TestReconcile(t *testing.T) {
 					Hostnames:        []string{"a.example.com", "b.example.com", "c.example.com"},
 					AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 					ServiceName:      "kuberture-mh",
-					RecordTTL:        60,
+					RecordTTL:        intPtr(60),
 					AddressSource:    config.AddressSourceEndpointSlice,
 					AddressType:      config.AddressTypeIPv4,
 				},
@@ -872,7 +876,7 @@ func TestBuildService(t *testing.T) {
 				Hostnames:        []string{testHostExample},
 				AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 				ServiceName:      "my-svc",
-				RecordTTL:        300,
+				RecordTTL:        intPtr(300),
 			},
 			addresses:         []string{testAddr1},
 			wantName:          "my-svc",
@@ -889,7 +893,7 @@ func TestBuildService(t *testing.T) {
 				Hostnames:        []string{"foo.bar"},
 				AnnotationPrefix: "dns.test.io/",
 				ServiceName:      "svc-multi",
-				RecordTTL:        120,
+				RecordTTL:        intPtr(120),
 			},
 			addresses:         []string{testAddr1, "10.0.0.2", "10.0.0.3"},
 			wantName:          "svc-multi",
@@ -906,7 +910,7 @@ func TestBuildService(t *testing.T) {
 				Hostnames:        []string{"a.com", "b.com"},
 				AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 				ServiceName:      "svc-hosts",
-				RecordTTL:        60,
+				RecordTTL:        intPtr(60),
 			},
 			addresses:         []string{testAddr1},
 			wantName:          "svc-hosts",
@@ -923,7 +927,7 @@ func TestBuildService(t *testing.T) {
 				Hostnames:        []string{"test.io"},
 				AnnotationPrefix: "my-dns.io/",
 				ServiceName:      "svc-custom",
-				RecordTTL:        60,
+				RecordTTL:        intPtr(60),
 			},
 			addresses:     []string{testAddr1},
 			wantName:      "svc-custom",
@@ -1095,7 +1099,7 @@ func TestReconcile_PartialOutputFailure(t *testing.T) {
 		Hostnames:        []string{"a.example.com"},
 		AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 		ServiceName:      testSvcA,
-		RecordTTL:        60,
+		RecordTTL:        intPtr(60),
 		AddressSource:    config.AddressSourceEndpointSlice,
 		AddressType:      config.AddressTypeIPv4,
 	}
@@ -1105,7 +1109,7 @@ func TestReconcile_PartialOutputFailure(t *testing.T) {
 		Hostnames:        []string{"b.example.com"},
 		AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 		ServiceName:      testSvcB,
-		RecordTTL:        60,
+		RecordTTL:        intPtr(60),
 		AddressSource:    config.AddressSourceEndpointSlice,
 		AddressType:      config.AddressTypeIPv4,
 	}
@@ -1197,7 +1201,7 @@ func TestReconcile_CustomAnnotationPrefix(t *testing.T) {
 		Hostnames:        []string{"test.io"},
 		AnnotationPrefix: "my-dns.io/",
 		ServiceName:      "svc-custom",
-		RecordTTL:        60,
+		RecordTTL:        intPtr(60),
 		AddressSource:    config.AddressSourceEndpointSlice,
 		AddressType:      config.AddressTypeIPv4,
 	}
@@ -1257,7 +1261,7 @@ func TestReconcile_ConfigHotReload(t *testing.T) {
 				Hostnames:        []string{"a.com"},
 				AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 				ServiceName:      "svc-reload",
-				RecordTTL:        60,
+				RecordTTL:        intPtr(60),
 				AddressSource:    config.AddressSourceEndpointSlice,
 				AddressType:      config.AddressTypeIPv4,
 			},
@@ -1297,7 +1301,7 @@ func TestReconcile_ConfigHotReload(t *testing.T) {
 				Hostnames:        []string{"b.com"},
 				AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 				ServiceName:      "svc-reload",
-				RecordTTL:        60,
+				RecordTTL:        intPtr(60),
 				AddressSource:    config.AddressSourceEndpointSlice,
 				AddressType:      config.AddressTypeIPv4,
 			},
@@ -1546,7 +1550,7 @@ func TestReconcile_NodeInternalWithIPFallback(t *testing.T) {
 		Hostnames:        []string{testHostExample},
 		AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 		ServiceName:      "svc-fallback",
-		RecordTTL:        60,
+		RecordTTL:        intPtr(60),
 		AddressSource:    config.AddressSourceNodeInternal,
 		AddressType:      config.AddressTypeIPv4,
 	}
@@ -1589,7 +1593,7 @@ func TestReconcile_MultipleOutputsDifferentSources(t *testing.T) {
 		Hostnames:        []string{"eps.example.com"},
 		AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 		ServiceName:      "svc-eps",
-		RecordTTL:        60,
+		RecordTTL:        intPtr(60),
 		AddressSource:    config.AddressSourceEndpointSlice,
 		AddressType:      config.AddressTypeIPv4,
 	}
@@ -1599,7 +1603,7 @@ func TestReconcile_MultipleOutputsDifferentSources(t *testing.T) {
 		Hostnames:        []string{"ext.example.com"},
 		AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 		ServiceName:      "svc-node-ext",
-		RecordTTL:        60,
+		RecordTTL:        intPtr(60),
 		AddressSource:    config.AddressSourceNodeExternal,
 		AddressType:      config.AddressTypeIPv4,
 	}
@@ -1644,7 +1648,7 @@ func TestReconcile_ResolverError(t *testing.T) {
 		Hostnames:        []string{testHostExample},
 		AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 		ServiceName:      "svc-resolver-err",
-		RecordTTL:        60,
+		RecordTTL:        intPtr(60),
 		AddressSource:    config.AddressSourceNodeInternal,
 		AddressType:      config.AddressTypeIPv4,
 	}
@@ -1748,7 +1752,7 @@ func TestBuildService_ZeroTTL(t *testing.T) {
 		Hostnames:        []string{testHostExample},
 		AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 		ServiceName:      "svc-zero-ttl",
-		RecordTTL:        0,
+		RecordTTL:        intPtr(0),
 	}
 
 	rec := &Reconciler{}
@@ -1778,7 +1782,7 @@ func TestBuildService_SingleHostname(t *testing.T) {
 		Hostnames:        []string{"only.example.com"},
 		AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 		ServiceName:      "svc-single",
-		RecordTTL:        60,
+		RecordTTL:        intPtr(60),
 	}
 
 	rec := &Reconciler{}
@@ -1808,7 +1812,7 @@ func TestBuildService_EmptyAddresses(t *testing.T) {
 		Hostnames:        []string{testHostExample},
 		AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 		ServiceName:      "svc-empty",
-		RecordTTL:        60,
+		RecordTTL:        intPtr(60),
 	}
 
 	rec := &Reconciler{}
@@ -1839,7 +1843,7 @@ func TestBuildService_ManagedByLabel(t *testing.T) {
 		Hostnames:        []string{testHostExample},
 		AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 		ServiceName:      "svc-label",
-		RecordTTL:        60,
+		RecordTTL:        intPtr(60),
 	}
 
 	rec := &Reconciler{}
@@ -1869,7 +1873,7 @@ func TestBuildService_WithOwnerRef(t *testing.T) {
 		Hostnames:        []string{testHostExample},
 		AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 		ServiceName:      "svc-owner",
-		RecordTTL:        60,
+		RecordTTL:        intPtr(60),
 	}
 
 	rec := &Reconciler{namespace: testSvcNamespace, ownerRef: ownerRef}
@@ -1912,7 +1916,7 @@ func TestBuildService_WithoutOwnerRef(t *testing.T) {
 		Hostnames:        []string{testHostExample},
 		AnnotationPrefix: "external-dns.alpha.kubernetes.io/",
 		ServiceName:      "svc-no-owner",
-		RecordTTL:        60,
+		RecordTTL:        intPtr(60),
 	}
 
 	rec := &Reconciler{namespace: testSvcNamespace, ownerRef: nil}

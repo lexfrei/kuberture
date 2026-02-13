@@ -168,7 +168,7 @@ type OutputConfig struct {
 	Hostnames        []string `yaml:"hostname"` //nolint:tagliatelle // user-facing YAML field name is intentionally singular
 	AnnotationPrefix string   `yaml:"annotationPrefix"`
 	ServiceName      string   `yaml:"serviceName"`
-	RecordTTL        int      `yaml:"recordTTL"` //nolint:tagliatelle // TTL is a well-known abbreviation, keep uppercase
+	RecordTTL        *int     `yaml:"recordTTL"` //nolint:tagliatelle // TTL is a well-known abbreviation, keep uppercase
 	AddressSource    string   `yaml:"addressSource"`
 	AddressType      string   `yaml:"addressType"`
 }
@@ -235,8 +235,9 @@ func applyOutputDefaults(cfg *Config) {
 			out.AnnotationPrefix = defaultAnnotationPrefix
 		}
 
-		if out.RecordTTL == 0 {
-			out.RecordTTL = defaultRecordTTL
+		if out.RecordTTL == nil {
+			out.RecordTTL = new(int)
+			*out.RecordTTL = defaultRecordTTL
 		}
 
 		if out.AddressSource == "" {
@@ -252,7 +253,7 @@ func applyOutputDefaults(cfg *Config) {
 // isValidLogLevel reports whether the given level is a supported slog level.
 func isValidLogLevel(level string) bool {
 	switch level {
-	case "debug", "info", "warn", "error":
+	case "debug", defaultLogLevel, "warn", "error":
 		return true
 	default:
 		return false
@@ -347,14 +348,11 @@ func validateOutputEnums(out *OutputConfig) error {
 		)
 	}
 
-	const (
-		minRecordTTL = 1
-		maxRecordTTL = 86400
-	)
+	const maxRecordTTL = 86400
 
-	if out.RecordTTL < minRecordTTL || out.RecordTTL > maxRecordTTL {
+	if *out.RecordTTL < 0 || *out.RecordTTL > maxRecordTTL {
 		return errors.Wrapf(
-			errors.Newf("recordTTL must be between %d and %d, got %d", minRecordTTL, maxRecordTTL, out.RecordTTL),
+			errors.Newf("recordTTL must be between 0 and %d, got %d", maxRecordTTL, *out.RecordTTL),
 			"output %s", out.Name,
 		)
 	}

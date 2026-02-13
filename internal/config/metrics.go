@@ -1,5 +1,3 @@
-// Package config provides configuration types, parsing, validation,
-// and hot-reload watching for the kuberture controller.
 package config
 
 import (

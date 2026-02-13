@@ -292,7 +292,7 @@ func (rec *Reconciler) buildService(
 		WithAnnotations(map[string]string{
 			output.AnnotationPrefix + "hostname": strings.Join(output.Hostnames, ","),
 			output.AnnotationPrefix + "target":   strings.Join(addresses, ","),
-			output.AnnotationPrefix + "ttl":      strconv.Itoa(output.RecordTTL),
+			output.AnnotationPrefix + "ttl":      strconv.Itoa(*output.RecordTTL),
 		})
 
 	if rec.ownerRef != nil {
