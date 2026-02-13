@@ -107,7 +107,7 @@ main() {
     kubectl --context "kind-${CLUSTER_NAME}" create namespace "${NAMESPACE}" --dry-run=client --output=yaml | \
         kubectl --context "kind-${CLUSTER_NAME}" apply --filename=-
 
-    helm install "${RELEASE_NAME}" ./chart \
+    if ! helm install "${RELEASE_NAME}" ./chart \
         --kube-context "kind-${CLUSTER_NAME}" \
         --namespace "${NAMESPACE}" \
         --set image.repository="${IMAGE_NAME}" \
@@ -118,11 +118,20 @@ main() {
         --set "config.outputs[0].serviceName=${OUTPUT_SERVICE}" \
         --set "config.outputs[0].recordTTL=60" \
         --wait \
-        --timeout 120s
+        --timeout 180s; then
+        info "Debug: Helm install failed, dumping diagnostics"
+        kubectl --context "kind-${CLUSTER_NAME}" --namespace "${NAMESPACE}" \
+            get pods --output=wide 2>/dev/null || true
+        kubectl --context "kind-${CLUSTER_NAME}" --namespace "${NAMESPACE}" \
+            describe deployment/"${RELEASE_NAME}" 2>/dev/null || true
+        kubectl --context "kind-${CLUSTER_NAME}" --namespace "${NAMESPACE}" \
+            logs deployment/"${RELEASE_NAME}" --tail=100 2>/dev/null || true
+        exit 1
+    fi
 
     info "Waiting for deployment rollout"
     kubectl --context "kind-${CLUSTER_NAME}" --namespace "${NAMESPACE}" \
-        rollout status deployment/"${RELEASE_NAME}" --timeout=120s
+        rollout status deployment/"${RELEASE_NAME}" --timeout=60s
 
     info "Waiting for Service to be created by controller"
     wait_for_service

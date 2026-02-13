@@ -51,13 +51,19 @@ func run() error {
 
 	logger.Info("config loaded", slog.String("path", configPath))
 
+	podNamespace := os.Getenv("POD_NAMESPACE")
+	if podNamespace == "" {
+		podNamespace = "default"
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Metrics: metricsserver.Options{
 			BindAddress: cfg.MetricsBindAddress,
 		},
-		HealthProbeBindAddress: cfg.HealthProbeBindAddress,
-		LeaderElection:         leaderElect,
-		LeaderElectionID:       "kuberture-leader",
+		HealthProbeBindAddress:  cfg.HealthProbeBindAddress,
+		LeaderElection:          leaderElect,
+		LeaderElectionID:        "kuberture-leader",
+		LeaderElectionNamespace: podNamespace,
 	})
 	if err != nil {
 		return errors.Wrap(err, "creating manager")
@@ -75,11 +81,6 @@ func run() error {
 			logger.Error("closing config watcher", slog.String("error", closeErr.Error()))
 		}
 	}()
-
-	podNamespace := os.Getenv("POD_NAMESPACE")
-	if podNamespace == "" {
-		podNamespace = "default"
-	}
 
 	reconciler := controller.NewReconciler(
 		mgr.GetClient(),
