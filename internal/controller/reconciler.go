@@ -150,6 +150,8 @@ func (rec *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 // Reconcile resolves addresses from EndpointSlices and patches headless
 // Service objects for each configured output.
 func (rec *Reconciler) Reconcile(ctx context.Context, _ ctrl.Request) (ctrl.Result, error) {
+	start := time.Now()
+
 	cfg := rec.config.Load()
 
 	sliceList, err := rec.listEndpointSlices(ctx, cfg)
@@ -166,6 +168,7 @@ func (rec *Reconciler) Reconcile(ctx context.Context, _ ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, outputErr
 	}
 
+	reconcileDuration.Observe(time.Since(start).Seconds())
 	reconcileTotal.WithLabelValues("success").Inc()
 	lastReconcileTimestamp.Set(float64(time.Now().Unix()))
 	rec.markReady()

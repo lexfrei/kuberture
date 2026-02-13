@@ -30,6 +30,14 @@ var (
 			Help: "Unix timestamp of the last successful reconciliation.",
 		},
 	)
+
+	reconcileDuration = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Name:    "kuberture_reconcile_duration_seconds",
+			Help:    "Duration of reconciliation cycles in seconds.",
+			Buckets: prometheus.DefBuckets,
+		},
+	)
 )
 
 //nolint:gochecknoinits // metrics registration is the canonical use of init.
@@ -38,5 +46,6 @@ func init() {
 		reconcileTotal,
 		endpointsResolved,
 		lastReconcileTimestamp,
+		reconcileDuration,
 	)
 }

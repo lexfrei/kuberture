@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -1496,6 +1497,31 @@ func TestReconcile_SuccessSetsMetrics(t *testing.T) {
 		if !ready {
 			t.Errorf("reconcile %d: ready = false, want true", idx)
 		}
+	}
+}
+
+func TestReconcile_RecordsDuration(t *testing.T) {
+	eps := makeEndpointSlice("eps-1", discoveryv1.AddressTypeIPv4, []discoveryv1.Endpoint{
+		{
+			Addresses:  []string{testAddr1},
+			Conditions: discoveryv1.EndpointConditions{Ready: boolPtr(true)},
+		},
+	})
+
+	output := defaultOutput()
+
+	var applied []appliedService
+	cfgPtr := newTestConfig([]config.OutputConfig{output})
+	rec := buildTestReconciler(t, []client.Object{eps}, cfgPtr, &applied, nil)
+
+	_, err := rec.Reconcile(context.Background(), ctrl.Request{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	count := testutil.CollectAndCount(reconcileDuration)
+	if count == 0 {
+		t.Error("reconcileDuration histogram has no observations after successful reconcile")
 	}
 }
 
