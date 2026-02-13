@@ -243,6 +243,23 @@ run_assertions() {
     else
         fail "Controller has ${ready_replicas} ready replicas, expected >= 1"
     fi
+
+    # 7. Service has ownerReference pointing to the controller Deployment.
+    local owner_kind
+    owner_kind="$(echo "${svc_json}" | jq -r '.metadata.ownerReferences[0].kind // empty')"
+    if [[ "${owner_kind}" == "Deployment" ]]; then
+        pass "Service has ownerReference kind=Deployment"
+    else
+        fail "Service ownerReference kind = '${owner_kind}', expected 'Deployment'"
+    fi
+
+    local owner_name
+    owner_name="$(echo "${svc_json}" | jq -r '.metadata.ownerReferences[0].name // empty')"
+    if [[ "${owner_name}" == "${RELEASE_NAME}" ]]; then
+        pass "Service ownerReference name = '${owner_name}'"
+    else
+        fail "Service ownerReference name = '${owner_name}', expected '${RELEASE_NAME}'"
+    fi
 }
 
 main "$@"
