@@ -49,12 +49,14 @@ func newTestLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 }
 
+func noopCancel() {}
+
 func TestWatcher_NewWatcher_ValidPath(t *testing.T) {
 	path := writeTestConfig(t, validYAML)
 	initial := loadInitialConfig(t, path)
 	log := newTestLogger()
 
-	watcher, err := NewWatcher(path, initial, log)
+	watcher, err := NewWatcher(path, initial, log, noopCancel)
 	if err != nil {
 		t.Fatalf("unexpected error creating watcher: %v", err)
 	}
@@ -75,7 +77,7 @@ func TestWatcher_NewWatcher_InvalidPath(t *testing.T) {
 	initial := &Config{}
 	log := newTestLogger()
 
-	_, err := NewWatcher("/nonexistent/dir/config.yaml", initial, log)
+	_, err := NewWatcher("/nonexistent/dir/config.yaml", initial, log, noopCancel)
 	if err == nil {
 		t.Fatal("expected error for invalid path, got nil")
 	}
@@ -86,7 +88,7 @@ func TestWatcher_Config_ReturnsInitialConfig(t *testing.T) {
 	initial := loadInitialConfig(t, path)
 	log := newTestLogger()
 
-	watcher, err := NewWatcher(path, initial, log)
+	watcher, err := NewWatcher(path, initial, log, noopCancel)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -104,7 +106,7 @@ func TestWatcher_ConfigPointer_NonNil(t *testing.T) {
 	initial := loadInitialConfig(t, path)
 	log := newTestLogger()
 
-	watcher, err := NewWatcher(path, initial, log)
+	watcher, err := NewWatcher(path, initial, log, noopCancel)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -126,7 +128,7 @@ func TestWatcher_ReloadOnFileWrite(t *testing.T) {
 	initial := loadInitialConfig(t, path)
 	log := newTestLogger()
 
-	watcher, err := NewWatcher(path, initial, log)
+	watcher, err := NewWatcher(path, initial, log, noopCancel)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -176,7 +178,7 @@ func TestWatcher_InvalidConfigPreservesOld(t *testing.T) {
 	initial := loadInitialConfig(t, path)
 	log := newTestLogger()
 
-	watcher, err := NewWatcher(path, initial, log)
+	watcher, err := NewWatcher(path, initial, log, noopCancel)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -215,7 +217,7 @@ func TestWatcher_ContextCancellationStopsRun(t *testing.T) {
 	initial := loadInitialConfig(t, path)
 	log := newTestLogger()
 
-	watcher, err := NewWatcher(path, initial, log)
+	watcher, err := NewWatcher(path, initial, log, noopCancel)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -249,7 +251,7 @@ func TestWatcher_CloseStopsFSWatcher(t *testing.T) {
 	initial := loadInitialConfig(t, path)
 	log := newTestLogger()
 
-	watcher, err := NewWatcher(path, initial, log)
+	watcher, err := NewWatcher(path, initial, log, noopCancel)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -292,7 +294,7 @@ func TestWatcher_WatchesParentDirectory(t *testing.T) {
 	initial := loadInitialConfig(t, configPath)
 	log := newTestLogger()
 
-	watcher, err := NewWatcher(configPath, initial, log)
+	watcher, err := NewWatcher(configPath, initial, log, noopCancel)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -345,7 +347,7 @@ func newCapturingLogger(buf *bytes.Buffer) *slog.Logger {
 	return slog.New(slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 }
 
-func TestReload_ExitsOnSourceNamespaceChange(t *testing.T) {
+func TestReload_CancelsOnSourceNamespaceChange(t *testing.T) {
 	initialYAML := `
 source:
   namespace: kube-system
@@ -373,15 +375,15 @@ outputs:
 	var logBuf bytes.Buffer
 	log := newCapturingLogger(&logBuf)
 
-	watcher, err := NewWatcher(path, initial, log)
+	cancelCalled := make(chan struct{}, 1)
+	testCancel := func() { cancelCalled <- struct{}{} }
+
+	watcher, err := NewWatcher(path, initial, log, testCancel)
 	if err != nil {
 		t.Fatalf("unexpected error creating watcher: %v", err)
 	}
 
 	defer watcher.Close()
-
-	exitCalled := make(chan int, 1)
-	watcher.exitFunc = func(code int) { exitCalled <- code }
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -398,12 +400,10 @@ outputs:
 	}
 
 	select {
-	case code := <-exitCalled:
-		if code != 0 {
-			t.Errorf("exit code = %d, want 0", code)
-		}
+	case <-cancelCalled:
+		// cancelFunc was invoked — graceful shutdown triggered.
 	case <-time.After(2 * time.Second):
-		t.Fatalf("timed out waiting for exit call; log output:\n%s", logBuf.String())
+		t.Fatalf("timed out waiting for cancel call; log output:\n%s", logBuf.String())
 	}
 
 	if !strings.Contains(logBuf.String(), "source.namespace changed") {
@@ -413,7 +413,7 @@ outputs:
 	cancel()
 }
 
-func TestReload_ExitsOnSourceServiceNameChange(t *testing.T) {
+func TestReload_CancelsOnSourceServiceNameChange(t *testing.T) {
 	initialYAML := `
 source:
   namespace: default
@@ -441,15 +441,15 @@ outputs:
 	var logBuf bytes.Buffer
 	log := newCapturingLogger(&logBuf)
 
-	watcher, err := NewWatcher(path, initial, log)
+	cancelCalled := make(chan struct{}, 1)
+	testCancel := func() { cancelCalled <- struct{}{} }
+
+	watcher, err := NewWatcher(path, initial, log, testCancel)
 	if err != nil {
 		t.Fatalf("unexpected error creating watcher: %v", err)
 	}
 
 	defer watcher.Close()
-
-	exitCalled := make(chan int, 1)
-	watcher.exitFunc = func(code int) { exitCalled <- code }
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -466,12 +466,10 @@ outputs:
 	}
 
 	select {
-	case code := <-exitCalled:
-		if code != 0 {
-			t.Errorf("exit code = %d, want 0", code)
-		}
+	case <-cancelCalled:
+		// cancelFunc was invoked — graceful shutdown triggered.
 	case <-time.After(2 * time.Second):
-		t.Fatalf("timed out waiting for exit call; log output:\n%s", logBuf.String())
+		t.Fatalf("timed out waiting for cancel call; log output:\n%s", logBuf.String())
 	}
 
 	if !strings.Contains(logBuf.String(), "source.serviceName changed") {

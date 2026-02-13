@@ -3,7 +3,6 @@ package config
 import (
 	"context"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"sync/atomic"
 	"time"
@@ -14,15 +13,23 @@ import (
 
 // Watcher monitors a config file for changes and reloads it atomically.
 type Watcher struct {
-	path      string
-	config    *atomic.Pointer[Config]
-	log       *slog.Logger
-	fsWatcher *fsnotify.Watcher
-	exitFunc  func(int) // overridable for testing; defaults to os.Exit
+	path       string
+	config     *atomic.Pointer[Config]
+	log        *slog.Logger
+	fsWatcher  *fsnotify.Watcher
+	cancelFunc context.CancelFunc // called when a restart-requiring change is detected
 }
 
 // NewWatcher creates a config file watcher with the given initial config.
-func NewWatcher(path string, initial *Config, log *slog.Logger) (*Watcher, error) {
+// The cancelFunc is invoked when a config change requires a process restart
+// (e.g. source.namespace or bind address changes). In production this should
+// be the signal context's cancel so the manager shuts down gracefully.
+func NewWatcher(
+	path string,
+	initial *Config,
+	log *slog.Logger,
+	cancelFunc context.CancelFunc,
+) (*Watcher, error) {
 	fsw, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, errors.Wrap(err, "creating fsnotify watcher")
@@ -41,11 +48,11 @@ func NewWatcher(path string, initial *Config, log *slog.Logger) (*Watcher, error
 	ptr.Store(initial)
 
 	return &Watcher{
-		path:      path,
-		config:    ptr,
-		log:       log,
-		fsWatcher: fsw,
-		exitFunc:  os.Exit,
+		path:       path,
+		config:     ptr,
+		log:        log,
+		fsWatcher:  fsw,
+		cancelFunc: cancelFunc,
 	}, nil
 }
 
@@ -105,7 +112,7 @@ func (w *Watcher) Run(ctx context.Context) error {
 
 // restartReason returns a non-empty string describing the first field that
 // changed and requires a process restart, or "" if a hot-reload is sufficient.
-func (w *Watcher) restartReason(old, updated *Config) string {
+func restartReason(old, updated *Config) string {
 	if old.MetricsBindAddress != updated.MetricsBindAddress {
 		return "metricsBindAddress changed"
 	}
@@ -139,13 +146,13 @@ func (w *Watcher) reload() {
 
 	old := w.config.Load()
 
-	if reason := w.restartReason(old, cfg); reason != "" {
-		w.log.Info("config change requires restart, exiting gracefully",
+	if reason := restartReason(old, cfg); reason != "" {
+		w.log.Info("config change requires restart, shutting down gracefully",
 			slog.String("reason", reason),
 			slog.String("path", w.path),
 		)
 
-		w.exitFunc(0)
+		w.cancelFunc()
 
 		return
 	}

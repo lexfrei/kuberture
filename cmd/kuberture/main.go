@@ -104,8 +104,13 @@ func run() error {
 		)
 	}
 
-	watcher, err := config.NewWatcher(configPath, cfg, logger)
+	signalCtx := ctrl.SetupSignalHandler()
+	watcherCtx, watcherCancel := context.WithCancel(signalCtx)
+
+	watcher, err := config.NewWatcher(configPath, cfg, logger, watcherCancel)
 	if err != nil {
+		watcherCancel()
+
 		return errors.Wrap(err, "creating config watcher")
 	}
 
@@ -139,9 +144,6 @@ func run() error {
 	if err != nil {
 		return errors.Wrap(err, "adding readyz check")
 	}
-
-	signalCtx := ctrl.SetupSignalHandler()
-	watcherCtx, watcherCancel := context.WithCancel(signalCtx)
 
 	defer watcherCancel()
 
