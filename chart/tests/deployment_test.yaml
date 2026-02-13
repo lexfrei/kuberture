@@ -175,6 +175,20 @@ tests:
           path: spec.template.spec.containers[0].startupProbe.periodSeconds
           value: 2
 
+  - it: should have seccompProfile RuntimeDefault at pod level
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.seccompProfile.type
+          value: RuntimeDefault
+
+  - it: should have seccompProfile RuntimeDefault at container level
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.seccompProfile.type
+          value: RuntimeDefault
+
   - it: should have metrics and health ports
     template: templates/deployment.yaml
     asserts:
