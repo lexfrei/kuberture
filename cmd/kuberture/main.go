@@ -9,7 +9,10 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/go-logr/logr"
+	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
@@ -64,6 +67,15 @@ func run() error {
 		LeaderElection:          leaderElect,
 		LeaderElectionID:        "kuberture-leader",
 		LeaderElectionNamespace: podNamespace,
+		Cache: cache.Options{
+			ByObject: map[client.Object]cache.ByObject{
+				&corev1.Service{}: {
+					Namespaces: map[string]cache.Config{
+						podNamespace: {},
+					},
+				},
+			},
+		},
 	})
 	if err != nil {
 		return errors.Wrap(err, "creating manager")
