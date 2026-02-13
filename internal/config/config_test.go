@@ -604,6 +604,58 @@ outputs:
 	}
 }
 
+func TestIsValidHostname(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{name: "simple domain", input: "example.com", want: true},
+		{name: "subdomain", input: "a.b.c.d.example.com", want: true},
+		{name: "wildcard", input: "*.example.com", want: true},
+		{name: "hyphenated", input: "test-host.example.com", want: true},
+		{name: "empty string", input: "", want: false},
+		{name: "spaces", input: "spaces in name.com", want: false},
+		{name: "leading hyphen label", input: "-leading.com", want: false},
+		{name: "single label no dot", input: "localhost", want: false},
+		{name: "too long", input: strings.Repeat("a", 250) + ".example.com", want: false},
+		{name: "unicode", input: "ün\u00efcode.com", want: false},
+		{name: "trailing dot", input: "example.com.", want: true},
+		{name: "double wildcard", input: "*.*.example.com", want: false},
+		{name: "wildcard not at start", input: "foo.*.example.com", want: false},
+		{name: "label too long", input: strings.Repeat("a", 64) + ".example.com", want: false},
+		{name: "uppercase", input: "Example.COM", want: true},
+		{name: "digits", input: "123.456.com", want: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := isValidHostname(tc.input)
+			if got != tc.want {
+				t.Errorf("isValidHostname(%q) = %v, want %v", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestValidate_InvalidHostname(t *testing.T) {
+	cfgYAML := `
+outputs:
+  - name: bad-host
+    hostname: ["spaces in name.com"]
+    serviceName: svc
+`
+
+	_, err := Load(writeTestConfig(t, cfgYAML))
+	if err == nil {
+		t.Fatal("expected error for invalid hostname, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "invalid hostname") {
+		t.Errorf("error = %q, want substring %q", err.Error(), "invalid hostname")
+	}
+}
+
 func TestLoad_SpecialCharactersInName(t *testing.T) {
 	names := []string{"my.output", "my-output", "my_output", "output-v2.1"}
 
