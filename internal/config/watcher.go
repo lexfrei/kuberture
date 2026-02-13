@@ -18,6 +18,7 @@ type Watcher struct {
 	log        *slog.Logger
 	fsWatcher  *fsnotify.Watcher
 	cancelFunc context.CancelFunc // called when a restart-requiring change is detected
+	reloadCh   chan struct{}       // signals successful config reloads
 }
 
 // NewWatcher creates a config file watcher with the given initial config.
@@ -53,6 +54,7 @@ func NewWatcher(
 		log:        log,
 		fsWatcher:  fsw,
 		cancelFunc: cancelFunc,
+		reloadCh:   make(chan struct{}, 1),
 	}, nil
 }
 
@@ -64,6 +66,13 @@ func (w *Watcher) Config() *Config {
 // ConfigPointer returns the atomic pointer used for live config reloads.
 func (w *Watcher) ConfigPointer() *atomic.Pointer[Config] {
 	return w.config
+}
+
+// ReloadChannel returns a channel that receives a signal after each
+// successful config reload. This allows controllers to trigger
+// reconciliation immediately when config changes.
+func (w *Watcher) ReloadChannel() <-chan struct{} {
+	return w.reloadCh
 }
 
 // Close stops the file system watcher and releases resources.
@@ -159,4 +168,10 @@ func (w *Watcher) reload() {
 
 	w.config.Store(cfg)
 	w.log.Info("config reloaded successfully", slog.String("path", w.path))
+
+	// Signal controllers to reconcile with the new config.
+	select {
+	case w.reloadCh <- struct{}{}:
+	default:
+	}
 }

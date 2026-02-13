@@ -478,3 +478,86 @@ outputs:
 
 	cancel()
 }
+
+func TestWatcher_ReloadChannel_SendsOnSuccess(t *testing.T) {
+	path := writeTestConfig(t, validYAML)
+	initial := loadInitialConfig(t, path)
+	log := newTestLogger()
+
+	watcher, err := NewWatcher(path, initial, log, noopCancel)
+	if err != nil {
+		t.Fatalf("unexpected error creating watcher: %v", err)
+	}
+
+	defer watcher.Close()
+
+	reloadCh := watcher.ReloadChannel()
+	if reloadCh == nil {
+		t.Fatal("ReloadChannel() returned nil")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		_ = watcher.Run(ctx)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+
+	writeErr := os.WriteFile(path, []byte(updatedYAML), 0o600)
+	if writeErr != nil {
+		t.Fatalf("writing updated config: %v", writeErr)
+	}
+
+	select {
+	case <-reloadCh:
+		// Reload signal received.
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for reload signal on channel")
+	}
+
+	cancel()
+}
+
+func TestWatcher_ReloadChannel_NoSendOnError(t *testing.T) {
+	path := writeTestConfig(t, validYAML)
+	initial := loadInitialConfig(t, path)
+	log := newTestLogger()
+
+	watcher, err := NewWatcher(path, initial, log, noopCancel)
+	if err != nil {
+		t.Fatalf("unexpected error creating watcher: %v", err)
+	}
+
+	defer watcher.Close()
+
+	reloadCh := watcher.ReloadChannel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		_ = watcher.Run(ctx)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+
+	// Write invalid YAML — reload should fail, no signal on channel.
+	writeErr := os.WriteFile(path, []byte(invalidYAML), 0o600)
+	if writeErr != nil {
+		t.Fatalf("writing invalid config: %v", writeErr)
+	}
+
+	// Wait for debounce + processing, then verify no signal was sent.
+	time.Sleep(300 * time.Millisecond)
+
+	select {
+	case <-reloadCh:
+		t.Fatal("received reload signal after invalid config write, expected none")
+	default:
+		// No signal — correct behavior.
+	}
+
+	cancel()
+}
