@@ -210,6 +210,13 @@ tests:
           path: spec.template.spec.containers[0].securityContext.seccompProfile.type
           value: RuntimeDefault
 
+  - it: should set revisionHistoryLimit
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.revisionHistoryLimit
+          value: 3
+
   - it: should have metrics and health ports
     template: templates/deployment.yaml
     asserts:

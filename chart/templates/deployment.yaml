@@ -9,6 +9,7 @@ metadata:
     {{- include "kuberture.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
   strategy:
     {{- if gt (int .Values.replicaCount) 1 }}
     type: RollingUpdate

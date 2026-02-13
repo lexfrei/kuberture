@@ -8,6 +8,11 @@
       "minimum": 1,
       "default": 1
     },
+    "revisionHistoryLimit": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 3
+    },
     "image": {
       "type": "object",
       "properties": {
