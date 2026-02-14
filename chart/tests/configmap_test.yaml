@@ -4,6 +4,8 @@ templates:
 release:
   name: kuberture
   namespace: default
+values:
+  - test-values.yaml
 tests:
   - it: should be a ConfigMap with correct apiVersion
     asserts:
@@ -42,8 +44,10 @@ tests:
           namespace: kube-system
           serviceName: my-service
         outputs:
-          - type: dns
-            zone: example.com
+          - name: custom
+            hostname:
+              - custom.example.com
+            serviceName: kuberture-custom
         metricsBindAddress: ":9090"
         healthProbeBindAddress: ":9091"
     asserts:
@@ -55,7 +59,7 @@ tests:
           pattern: "serviceName: my-service"
       - matchRegex:
           path: data["config.yaml"]
-          pattern: "zone: example.com"
+          pattern: "custom.example.com"
       - matchRegex:
           path: data["config.yaml"]
           pattern: "metricsBindAddress: :9090"

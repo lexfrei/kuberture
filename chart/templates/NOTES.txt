@@ -4,7 +4,7 @@ Controller watches EndpointSlice "{{ .Values.config.source.serviceName }}" in na
 
 Configured outputs:
 {{- range .Values.config.outputs }}
-  - {{ .name }}: {{ .hostname | join ", " }} -> {{ .serviceName }}{{ if .serviceNamespace }}.{{ .serviceNamespace }}{{ end }}
+  - {{ .name }}: {{ .hostname | join ", " }} -> {{ .serviceName }}
 {{- end }}
 
 Verify the deployment:

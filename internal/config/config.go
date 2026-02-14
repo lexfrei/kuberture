@@ -34,6 +34,11 @@ const (
 	defaultRecordTTL        = 60
 	defaultAddressSource    = AddressSourceEndpointSlice
 	defaultAddressType      = AddressTypeIPv4
+	defaultLogLevel         = logLevelInfo
+	logLevelDebug           = "debug"
+	logLevelInfo            = "info"
+	logLevelWarn            = "warn"
+	logLevelError           = "error"
 	debounceDuration        = 100 * time.Millisecond
 )
 
@@ -82,12 +87,77 @@ func isValidDNSLabel(name string) bool {
 	return true
 }
 
+// isHostnameChar reports whether ch is valid in a DNS label (alphanumeric or hyphen).
+func isHostnameChar(ch rune) bool {
+	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+		(ch >= '0' && ch <= '9') || ch == '-'
+}
+
+// isValidLabel checks a single DNS label for RFC 1123 compliance.
+// Unlike isValidDNSLabel (used for Kubernetes serviceName, lowercase only),
+// this allows uppercase because hostnames are case-insensitive per RFC 952.
+func isValidLabel(label string) bool {
+	const maxLabelLen = 63
+
+	if label == "" || len(label) > maxLabelLen {
+		return false
+	}
+
+	if label[0] == '-' || label[len(label)-1] == '-' {
+		return false
+	}
+
+	for _, ch := range label {
+		if !isHostnameChar(ch) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// isValidHostname checks whether h is a valid DNS hostname per RFC 952/1123.
+// It accepts optional wildcard prefix (*.example.com) and trailing dot.
+// Requires at least two labels (e.g. "example.com", not "localhost").
+func isValidHostname(h string) bool {
+	if h == "" {
+		return false
+	}
+
+	check := strings.TrimSuffix(h, ".")
+
+	const maxHostnameLen = 253
+	if len(check) > maxHostnameLen {
+		return false
+	}
+
+	if strings.HasPrefix(check, "*.") {
+		check = check[2:]
+	} else if strings.Contains(check, "*") {
+		return false
+	}
+
+	labels := strings.Split(check, ".")
+	if len(labels) < 2 {
+		return false
+	}
+
+	for _, label := range labels {
+		if !isValidLabel(label) {
+			return false
+		}
+	}
+
+	return true
+}
+
 // Config is the top-level configuration for the kuberture controller.
 type Config struct {
 	Source                 SourceConfig   `yaml:"source"`
 	Outputs                []OutputConfig `yaml:"outputs"`
 	MetricsBindAddress     string         `yaml:"metricsBindAddress"`
 	HealthProbeBindAddress string         `yaml:"healthProbeBindAddress"`
+	LogLevel               string         `yaml:"logLevel"`
 }
 
 // SourceConfig defines the source Kubernetes service to watch.
@@ -102,8 +172,7 @@ type OutputConfig struct {
 	Hostnames        []string `yaml:"hostname"` //nolint:tagliatelle // user-facing YAML field name is intentionally singular
 	AnnotationPrefix string   `yaml:"annotationPrefix"`
 	ServiceName      string   `yaml:"serviceName"`
-	ServiceNamespace string   `yaml:"serviceNamespace"`
-	RecordTTL        int      `yaml:"recordTTL"` //nolint:tagliatelle // TTL is a well-known abbreviation, keep uppercase
+	RecordTTL        *int     `yaml:"recordTTL"` //nolint:tagliatelle // TTL is a well-known abbreviation, keep uppercase
 	AddressSource    string   `yaml:"addressSource"`
 	AddressType      string   `yaml:"addressType"`
 }
@@ -156,6 +225,10 @@ func applyBindDefaults(cfg *Config) {
 	if cfg.HealthProbeBindAddress == "" {
 		cfg.HealthProbeBindAddress = defaultHealthProbeAddr
 	}
+
+	if cfg.LogLevel == "" {
+		cfg.LogLevel = defaultLogLevel
+	}
 }
 
 func applyOutputDefaults(cfg *Config) {
@@ -166,8 +239,9 @@ func applyOutputDefaults(cfg *Config) {
 			out.AnnotationPrefix = defaultAnnotationPrefix
 		}
 
-		if out.RecordTTL == 0 {
-			out.RecordTTL = defaultRecordTTL
+		if out.RecordTTL == nil {
+			out.RecordTTL = new(int)
+			*out.RecordTTL = defaultRecordTTL
 		}
 
 		if out.AddressSource == "" {
@@ -177,16 +251,26 @@ func applyOutputDefaults(cfg *Config) {
 		if out.AddressType == "" {
 			out.AddressType = defaultAddressType
 		}
+	}
+}
 
-		if out.ServiceNamespace == "" {
-			out.ServiceNamespace = defaultNamespace
-		}
+// isValidLogLevel reports whether the given level is a supported slog level.
+func isValidLogLevel(level string) bool {
+	switch level {
+	case logLevelDebug, logLevelInfo, logLevelWarn, logLevelError:
+		return true
+	default:
+		return false
 	}
 }
 
 func validate(cfg *Config) error {
 	if len(cfg.Outputs) == 0 {
 		return errors.New("at least one output is required")
+	}
+
+	if !isValidLogLevel(cfg.LogLevel) {
+		return errors.Newf("invalid logLevel %q, must be one of: debug, info, warn, error", cfg.LogLevel)
 	}
 
 	fieldsErr := validateOutputFields(cfg.Outputs)
@@ -220,6 +304,15 @@ func validateSingleOutput(out *OutputConfig) error {
 		)
 	}
 
+	for _, h := range out.Hostnames {
+		if !isValidHostname(h) {
+			return errors.Wrapf(
+				errors.Newf("invalid hostname %q", h),
+				"output %s", out.Name,
+			)
+		}
+	}
+
 	if out.ServiceName == "" {
 		return errors.Wrap(
 			errors.New("serviceName is required"),
@@ -230,13 +323,6 @@ func validateSingleOutput(out *OutputConfig) error {
 	if !isValidDNSLabel(out.ServiceName) {
 		return errors.Wrapf(
 			errors.Newf("serviceName %q is not a valid DNS label", out.ServiceName),
-			"output %s", out.Name,
-		)
-	}
-
-	if !isValidDNSLabel(out.ServiceNamespace) {
-		return errors.Wrapf(
-			errors.Newf("serviceNamespace %q is not a valid DNS label", out.ServiceNamespace),
 			"output %s", out.Name,
 		)
 	}
@@ -266,14 +352,11 @@ func validateOutputEnums(out *OutputConfig) error {
 		)
 	}
 
-	const (
-		minRecordTTL = 1
-		maxRecordTTL = 86400
-	)
+	const maxRecordTTL = 86400
 
-	if out.RecordTTL < minRecordTTL || out.RecordTTL > maxRecordTTL {
+	if *out.RecordTTL < 0 || *out.RecordTTL > maxRecordTTL {
 		return errors.Wrapf(
-			errors.Newf("recordTTL must be between %d and %d, got %d", minRecordTTL, maxRecordTTL, out.RecordTTL),
+			errors.Newf("recordTTL must be between 0 and %d, got %d", maxRecordTTL, *out.RecordTTL),
 			"output %s", out.Name,
 		)
 	}
@@ -287,7 +370,7 @@ func validateOutputUniqueness(outputs []OutputConfig) error {
 		return namesErr
 	}
 
-	svcErr := validateUniqueServicePairs(outputs)
+	svcErr := validateUniqueServiceNames(outputs)
 	if svcErr != nil {
 		return svcErr
 	}
@@ -313,28 +396,19 @@ func validateUniqueNames(outputs []OutputConfig) error {
 	return nil
 }
 
-func validateUniqueServicePairs(outputs []OutputConfig) error {
-	type svcKey struct {
-		name      string
-		namespace string
-	}
-
-	seen := make(map[svcKey]bool, len(outputs))
+func validateUniqueServiceNames(outputs []OutputConfig) error {
+	seen := make(map[string]bool, len(outputs))
 
 	for idx := range outputs {
-		key := svcKey{
-			name:      outputs[idx].ServiceName,
-			namespace: outputs[idx].ServiceNamespace,
-		}
-
-		if seen[key] {
+		name := outputs[idx].ServiceName
+		if seen[name] {
 			return errors.Wrap(
-				errors.New("duplicate serviceName+serviceNamespace pair"),
-				key.namespace+"/"+key.name,
+				errors.New("duplicate serviceName"),
+				name,
 			)
 		}
 
-		seen[key] = true
+		seen[name] = true
 	}
 
 	return nil

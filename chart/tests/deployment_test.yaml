@@ -8,6 +8,8 @@ release:
 chart:
   version: 0.1.0
   appVersion: "0.1.0"
+values:
+  - test-values.yaml
 tests:
   - it: should be a Deployment with correct apiVersion
     template: templates/deployment.yaml
@@ -106,8 +108,7 @@ tests:
           path: spec.template.spec.containers[0].volumeMounts
           content:
             name: config
-            mountPath: /etc/kuberture/config.yaml
-            subPath: config.yaml
+            mountPath: /etc/kuberture
             readOnly: true
       - contains:
           path: spec.template.spec.volumes
@@ -151,12 +152,70 @@ tests:
           path: spec.replicas
           value: 3
 
+  - it: should use Recreate strategy with single replica
+    template: templates/deployment.yaml
+    set:
+      replicaCount: 1
+    asserts:
+      - equal:
+          path: spec.strategy.type
+          value: Recreate
+
+  - it: should use RollingUpdate strategy with multiple replicas
+    template: templates/deployment.yaml
+    set:
+      replicaCount: 3
+    asserts:
+      - equal:
+          path: spec.strategy.type
+          value: RollingUpdate
+      - equal:
+          path: spec.strategy.rollingUpdate.maxUnavailable
+          value: 1
+
   - it: should use correct imagePullPolicy
     template: templates/deployment.yaml
     asserts:
       - equal:
           path: spec.template.spec.containers[0].imagePullPolicy
           value: IfNotPresent
+
+  - it: should have startup probe on /healthz
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.httpGet.path
+          value: /healthz
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.httpGet.port
+          value: health
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.failureThreshold
+          value: 30
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.periodSeconds
+          value: 2
+
+  - it: should have seccompProfile RuntimeDefault at pod level
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.seccompProfile.type
+          value: RuntimeDefault
+
+  - it: should have seccompProfile RuntimeDefault at container level
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.seccompProfile.type
+          value: RuntimeDefault
+
+  - it: should set revisionHistoryLimit
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.revisionHistoryLimit
+          value: 3
 
   - it: should have metrics and health ports
     template: templates/deployment.yaml

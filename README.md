@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo.png" alt="kuberture logo" width="300">
+</p>
+
 # kuberture
 
 Kubernetes controller that translates EndpointSlice resources into headless Services annotated for [external-dns](https://github.com/kubernetes-sigs/external-dns) consumption.
@@ -40,7 +44,6 @@ outputs:
       - api-internal.k8s.example.com
     annotationPrefix: "internal.company.io/"
     serviceName: kuberture-internal
-    serviceNamespace: default
     recordTTL: 60
     addressSource: endpointslice
     addressType: IPv4
@@ -50,7 +53,6 @@ outputs:
       - api.k8s.example.com
     annotationPrefix: "external-dns.alpha.kubernetes.io/"
     serviceName: kuberture-external
-    serviceNamespace: default
     recordTTL: 300
     addressSource: node-external
     addressType: IPv4
@@ -73,7 +75,6 @@ healthProbeBindAddress: ":8081"   # default: ":8081"
 | Field | Default |
 | --- | --- |
 | `annotationPrefix` | `external-dns.alpha.kubernetes.io/` |
-| `serviceNamespace` | `default` |
 | `recordTTL` | `60` (max: 86400) |
 | `addressSource` | `endpointslice` |
 | `addressType` | `IPv4` |
@@ -164,11 +165,16 @@ chart/                   Helm chart
 
 ## RBAC
 
-The controller requires the following cluster-level permissions:
+The controller uses split RBAC for least-privilege access:
+
+Cluster-level (ClusterRole — read-only):
 
 - `discovery.k8s.io/endpointslices`: get, list, watch
 - `core/nodes`: get, list, watch
-- `core/services`: get, list, watch, create, update, patch
+
+Namespace-level (Role — in the controller's own namespace):
+
+- `core/services`: get, list, watch, create, update, patch, delete
 - `coordination.k8s.io/leases`: get, list, watch, create, update, patch
 - `core/events`: create, patch
 

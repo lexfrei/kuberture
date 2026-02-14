@@ -2,9 +2,13 @@ suite: RBAC tests
 templates:
   - templates/clusterrole.yaml
   - templates/clusterrolebinding.yaml
+  - templates/role.yaml
+  - templates/rolebinding.yaml
 release:
   name: kuberture
   namespace: default
+values:
+  - test-values.yaml
 tests:
   - it: ClusterRole should have correct kind and apiVersion
     template: templates/clusterrole.yaml
@@ -34,35 +38,12 @@ tests:
             resources: ["nodes"]
             verbs: ["get", "list", "watch"]
 
-  - it: ClusterRole should have services rule
+  - it: ClusterRole should only have read-only rules
     template: templates/clusterrole.yaml
     asserts:
-      - contains:
+      - lengthEqual:
           path: rules
-          content:
-            apiGroups: [""]
-            resources: ["services"]
-            verbs: ["get", "list", "watch", "create", "update", "patch"]
-
-  - it: ClusterRole should have leases rule
-    template: templates/clusterrole.yaml
-    asserts:
-      - contains:
-          path: rules
-          content:
-            apiGroups: ["coordination.k8s.io"]
-            resources: ["leases"]
-            verbs: ["get", "list", "watch", "create", "update", "patch"]
-
-  - it: ClusterRole should have events rule
-    template: templates/clusterrole.yaml
-    asserts:
-      - contains:
-          path: rules
-          content:
-            apiGroups: [""]
-            resources: ["events"]
-            verbs: ["create", "patch"]
+          count: 2
 
   - it: ClusterRoleBinding should have correct kind and apiVersion
     template: templates/clusterrolebinding.yaml
@@ -87,6 +68,102 @@ tests:
 
   - it: ClusterRoleBinding should reference correct ServiceAccount
     template: templates/clusterrolebinding.yaml
+    asserts:
+      - contains:
+          path: subjects
+          content:
+            kind: ServiceAccount
+            name: kuberture
+            namespace: default
+
+  - it: Role should have correct kind and apiVersion
+    template: templates/role.yaml
+    asserts:
+      - isKind:
+          of: Role
+      - isAPIVersion:
+          of: rbac.authorization.k8s.io/v1
+
+  - it: Role should have services rule
+    template: templates/role.yaml
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: [""]
+            resources: ["services"]
+            verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  - it: Role should have leases rule
+    template: templates/role.yaml
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["coordination.k8s.io"]
+            resources: ["leases"]
+            verbs: ["get", "list", "watch", "create", "update", "patch"]
+
+  - it: Role should have events rule
+    template: templates/role.yaml
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: [""]
+            resources: ["events"]
+            verbs: ["create", "patch"]
+
+  - it: Role should have pods rule for owner resolution
+    template: templates/role.yaml
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: [""]
+            resources: ["pods"]
+            verbs: ["get"]
+
+  - it: Role should have replicasets rule for owner resolution
+    template: templates/role.yaml
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["apps"]
+            resources: ["replicasets"]
+            verbs: ["get"]
+
+  - it: Role should have correct number of rules
+    template: templates/role.yaml
+    asserts:
+      - lengthEqual:
+          path: rules
+          count: 5
+
+  - it: RoleBinding should have correct kind and apiVersion
+    template: templates/rolebinding.yaml
+    asserts:
+      - isKind:
+          of: RoleBinding
+      - isAPIVersion:
+          of: rbac.authorization.k8s.io/v1
+
+  - it: RoleBinding should reference correct Role
+    template: templates/rolebinding.yaml
+    asserts:
+      - equal:
+          path: roleRef.apiGroup
+          value: rbac.authorization.k8s.io
+      - equal:
+          path: roleRef.kind
+          value: Role
+      - equal:
+          path: roleRef.name
+          value: kuberture
+
+  - it: RoleBinding should reference correct ServiceAccount
+    template: templates/rolebinding.yaml
     asserts:
       - contains:
           path: subjects

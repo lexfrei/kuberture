@@ -7,6 +7,13 @@ import (
 	"testing"
 )
 
+const minimalValidConfig = `
+outputs:
+  - name: test
+    hostname: [test.com]
+    serviceName: svc
+`
+
 func writeTestConfig(t *testing.T, content string) string {
 	t.Helper()
 
@@ -35,7 +42,6 @@ outputs:
       - www.example.com
     annotationPrefix: "custom.io/"
     serviceName: my-svc
-    serviceNamespace: prod-ns
     recordTTL: 300
     addressSource: node-external
     addressType: IPv6
@@ -78,8 +84,8 @@ outputs:
 		t.Errorf("annotationPrefix = %q, want custom.io/", out.AnnotationPrefix)
 	}
 
-	if out.RecordTTL != 300 {
-		t.Errorf("recordTTL = %d, want 300", out.RecordTTL)
+	if *out.RecordTTL != 300 {
+		t.Errorf("recordTTL = %d, want 300", *out.RecordTTL)
 	}
 
 	if out.AddressSource != "node-external" {
@@ -125,8 +131,8 @@ outputs:
 		t.Errorf("annotationPrefix = %q, want external-dns.alpha.kubernetes.io/", out.AnnotationPrefix)
 	}
 
-	if out.RecordTTL != 60 {
-		t.Errorf("recordTTL = %d, want 60", out.RecordTTL)
+	if *out.RecordTTL != 60 {
+		t.Errorf("recordTTL = %d, want 60", *out.RecordTTL)
 	}
 
 	if out.AddressSource != "endpointslice" {
@@ -135,10 +141,6 @@ outputs:
 
 	if out.AddressType != "IPv4" {
 		t.Errorf("addressType = %q, want IPv4", out.AddressType)
-	}
-
-	if out.ServiceNamespace != defaultNamespace {
-		t.Errorf("serviceNamespace = %q, want %s", out.ServiceNamespace, defaultNamespace)
 	}
 }
 
@@ -200,19 +202,17 @@ outputs:
 			wantErr: "duplicate output name",
 		},
 		{
-			name: "duplicate service name and namespace",
+			name: "duplicate service name",
 			yaml: `
 outputs:
   - name: first
     hostname: [a.com]
     serviceName: shared-svc
-    serviceNamespace: shared-ns
   - name: second
     hostname: [b.com]
     serviceName: shared-svc
-    serviceNamespace: shared-ns
 `,
-			wantErr: "duplicate serviceName+serviceNamespace pair",
+			wantErr: "duplicate serviceName",
 		},
 		{
 			name: "missing hostname",
@@ -304,8 +304,8 @@ outputs:
 		t.Fatal("expected error for negative recordTTL, got nil")
 	}
 
-	if !strings.Contains(err.Error(), "recordTTL must be between 1 and") {
-		t.Errorf("error = %q, want substring %q", err.Error(), "recordTTL must be between 1 and")
+	if !strings.Contains(err.Error(), "recordTTL must be between 0 and") {
+		t.Errorf("error = %q, want substring %q", err.Error(), "recordTTL must be between 0 and")
 	}
 }
 
@@ -323,8 +323,8 @@ outputs:
 		t.Fatal("expected error for excessive recordTTL, got nil")
 	}
 
-	if !strings.Contains(err.Error(), "recordTTL must be between 1 and") {
-		t.Errorf("error = %q, want substring %q", err.Error(), "recordTTL must be between 1 and")
+	if !strings.Contains(err.Error(), "recordTTL must be between 0 and") {
+		t.Errorf("error = %q, want substring %q", err.Error(), "recordTTL must be between 0 and")
 	}
 }
 
@@ -342,12 +342,12 @@ outputs:
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if cfg.Outputs[0].RecordTTL != 86400 {
-		t.Errorf("recordTTL = %d, want 86400", cfg.Outputs[0].RecordTTL)
+	if *cfg.Outputs[0].RecordTTL != 86400 {
+		t.Errorf("recordTTL = %d, want 86400", *cfg.Outputs[0].RecordTTL)
 	}
 }
 
-func TestLoad_ZeroRecordTTLGetsDefault(t *testing.T) {
+func TestLoad_NilRecordTTLGetsDefault(t *testing.T) {
 	cfgYAML := `
 outputs:
   - name: default-ttl
@@ -360,8 +360,31 @@ outputs:
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if cfg.Outputs[0].RecordTTL != 60 {
-		t.Errorf("recordTTL = %d, want 60 (default)", cfg.Outputs[0].RecordTTL)
+	if *cfg.Outputs[0].RecordTTL != 60 {
+		t.Errorf("recordTTL = %d, want 60 (default)", *cfg.Outputs[0].RecordTTL)
+	}
+}
+
+func TestLoad_ExplicitTTLZeroIsPreserved(t *testing.T) {
+	cfgYAML := `
+outputs:
+  - name: zero-ttl
+    hostname: [test.com]
+    serviceName: svc
+    recordTTL: 0
+`
+
+	cfg, err := Load(writeTestConfig(t, cfgYAML))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if cfg.Outputs[0].RecordTTL == nil {
+		t.Fatal("recordTTL is nil, want 0")
+	}
+
+	if *cfg.Outputs[0].RecordTTL != 0 {
+		t.Errorf("recordTTL = %d, want 0", *cfg.Outputs[0].RecordTTL)
 	}
 }
 
@@ -371,15 +394,12 @@ outputs:
   - name: first
     hostname: [a.example.com]
     serviceName: svc-a
-    serviceNamespace: ns-a
   - name: second
     hostname: [b.example.com]
     serviceName: svc-b
-    serviceNamespace: ns-b
   - name: third
     hostname: [c.example.com, d.example.com]
     serviceName: svc-c
-    serviceNamespace: ns-c
     recordTTL: 120
     addressSource: node-internal
     addressType: IPv6
@@ -410,8 +430,8 @@ outputs:
 		t.Errorf("outputs[2] hostnames count = %d, want 2", len(cfg.Outputs[2].Hostnames))
 	}
 
-	if cfg.Outputs[2].RecordTTL != 120 {
-		t.Errorf("outputs[2].RecordTTL = %d, want 120", cfg.Outputs[2].RecordTTL)
+	if *cfg.Outputs[2].RecordTTL != 120 {
+		t.Errorf("outputs[2].RecordTTL = %d, want 120", *cfg.Outputs[2].RecordTTL)
 	}
 
 	if cfg.Outputs[2].AddressSource != "node-internal" {
@@ -474,14 +494,7 @@ outputs:
 }
 
 func TestLoad_SourceDefaults(t *testing.T) {
-	cfgYAML := `
-outputs:
-  - name: test
-    hostname: [test.com]
-    serviceName: svc
-`
-
-	cfg, err := Load(writeTestConfig(t, cfgYAML))
+	cfg, err := Load(writeTestConfig(t, minimalValidConfig))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -544,11 +557,9 @@ outputs:
   - name: output-a
     hostname: [shared.example.com, unique-a.example.com]
     serviceName: svc-a
-    serviceNamespace: ns-a
   - name: output-b
     hostname: [shared.example.com, unique-b.example.com]
     serviceName: svc-b
-    serviceNamespace: ns-b
 `
 
 	_, err := Load(writeTestConfig(t, cfgYAML))
@@ -585,7 +596,6 @@ outputs:
   - name: valid-dns
     hostname: [test.com]
     serviceName: my-service
-    serviceNamespace: prod-ns
 `
 
 	cfg, err := Load(writeTestConfig(t, cfgYAML))
@@ -596,33 +606,11 @@ outputs:
 	if cfg.Outputs[0].ServiceName != "my-service" {
 		t.Errorf("serviceName = %q, want %q", cfg.Outputs[0].ServiceName, "my-service")
 	}
-
-	if cfg.Outputs[0].ServiceNamespace != "prod-ns" {
-		t.Errorf("serviceNamespace = %q, want %q", cfg.Outputs[0].ServiceNamespace, "prod-ns")
-	}
 }
 
-func TestLoad_InvalidDNSLabelServiceNamespace(t *testing.T) {
-	cfgYAML := `
-outputs:
-  - name: bad-ns
-    hostname: [test.com]
-    serviceName: valid-svc
-    serviceNamespace: "INVALID NS"
-`
-
-	_, err := Load(writeTestConfig(t, cfgYAML))
-	if err == nil {
-		t.Fatal("expected error for invalid serviceNamespace, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "is not a valid DNS label") {
-		t.Errorf("error = %q, want substring %q", err.Error(), "is not a valid DNS label")
-	}
-}
-
-func TestLoad_VeryLongHostname(t *testing.T) {
-	longHostname := strings.Repeat("a", 253) + ".example.com"
+func TestLoad_LongButValidHostname(t *testing.T) {
+	// 63-char label + ".example.com" = 75 chars, well within 253 limit.
+	longHostname := strings.Repeat("a", 63) + ".example.com"
 	cfgYAML := `
 outputs:
   - name: long-host
@@ -637,6 +625,132 @@ outputs:
 
 	if cfg.Outputs[0].Hostnames[0] != longHostname {
 		t.Errorf("hostname length = %d, want %d", len(cfg.Outputs[0].Hostnames[0]), len(longHostname))
+	}
+}
+
+func TestLoad_TooLongHostnameRejected(t *testing.T) {
+	longHostname := strings.Repeat("a", 253) + ".example.com"
+	cfgYAML := `
+outputs:
+  - name: long-host
+    hostname: [` + longHostname + `]
+    serviceName: svc
+`
+
+	_, err := Load(writeTestConfig(t, cfgYAML))
+	if err == nil {
+		t.Fatal("expected error for hostname exceeding 253 characters, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "invalid hostname") {
+		t.Errorf("error = %q, want substring %q", err.Error(), "invalid hostname")
+	}
+}
+
+func TestIsValidHostname(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{name: "simple domain", input: "example.com", want: true},
+		{name: "subdomain", input: "a.b.c.d.example.com", want: true},
+		{name: "wildcard", input: "*.example.com", want: true},
+		{name: "hyphenated", input: "test-host.example.com", want: true},
+		{name: "empty string", input: "", want: false},
+		{name: "spaces", input: "spaces in name.com", want: false},
+		{name: "leading hyphen label", input: "-leading.com", want: false},
+		{name: "single label no dot", input: "localhost", want: false},
+		{name: "too long", input: strings.Repeat("a", 250) + ".example.com", want: false},
+		{name: "unicode", input: "ün\u00efcode.com", want: false},
+		{name: "trailing dot", input: "example.com.", want: true},
+		{name: "double wildcard", input: "*.*.example.com", want: false},
+		{name: "wildcard not at start", input: "foo.*.example.com", want: false},
+		{name: "label too long", input: strings.Repeat("a", 64) + ".example.com", want: false},
+		{name: "uppercase", input: "Example.COM", want: true},
+		{name: "digits", input: "123.456.com", want: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := isValidHostname(tc.input)
+			if got != tc.want {
+				t.Errorf("isValidHostname(%q) = %v, want %v", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestValidate_InvalidHostname(t *testing.T) {
+	cfgYAML := `
+outputs:
+  - name: bad-host
+    hostname: ["spaces in name.com"]
+    serviceName: svc
+`
+
+	_, err := Load(writeTestConfig(t, cfgYAML))
+	if err == nil {
+		t.Fatal("expected error for invalid hostname, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "invalid hostname") {
+		t.Errorf("error = %q, want substring %q", err.Error(), "invalid hostname")
+	}
+}
+
+func TestApplyDefaults_LogLevel(t *testing.T) {
+	cfg, err := Load(writeTestConfig(t, minimalValidConfig))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if cfg.LogLevel != "info" {
+		t.Errorf("logLevel = %q, want %q", cfg.LogLevel, "info")
+	}
+}
+
+func TestValidate_InvalidLogLevel(t *testing.T) {
+	cfgYAML := `
+logLevel: "trace"
+outputs:
+  - name: test
+    hostname: [test.com]
+    serviceName: svc
+`
+
+	_, err := Load(writeTestConfig(t, cfgYAML))
+	if err == nil {
+		t.Fatal("expected error for invalid logLevel, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "invalid logLevel") {
+		t.Errorf("error = %q, want substring %q", err.Error(), "invalid logLevel")
+	}
+}
+
+func TestValidate_ValidLogLevels(t *testing.T) {
+	levels := []string{"debug", "info", "warn", "error"}
+
+	for _, level := range levels {
+		t.Run(level, func(t *testing.T) {
+			cfgYAML := `
+logLevel: "` + level + `"
+outputs:
+  - name: test
+    hostname: [test.com]
+    serviceName: svc
+`
+
+			cfg, err := Load(writeTestConfig(t, cfgYAML))
+			if err != nil {
+				t.Fatalf("unexpected error for logLevel %q: %v", level, err)
+			}
+
+			if cfg.LogLevel != level {
+				t.Errorf("logLevel = %q, want %q", cfg.LogLevel, level)
+			}
+		})
 	}
 }
 

@@ -16,10 +16,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	applycorev1 "k8s.io/client-go/applyconfigurations/core/v1"
+	applymetav1 "k8s.io/client-go/applyconfigurations/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/lexfrei/kuberture/internal/config"
 	"github.com/lexfrei/kuberture/internal/resolver"
@@ -34,6 +37,14 @@ const (
 	managedByLabel = "app.kubernetes.io/managed-by"
 	managedByValue = "kuberture"
 	instanceLabel  = "kuberture/instance"
+
+	// stalenessThreshold is how long since the last successful reconciliation
+	// before the readiness check reports unhealthy.
+	stalenessThreshold = 5 * time.Minute
+
+	// requeueInterval is how often the controller re-reconciles to prevent
+	// the readiness probe from going stale on quiet clusters.
+	requeueInterval = 2 * time.Minute
 )
 
 // Reconciler watches EndpointSlice and Node resources and maintains headless
@@ -44,18 +55,30 @@ type Reconciler struct {
 	config       *atomic.Pointer[config.Config]
 	log          *slog.Logger
 	instanceName string
+	namespace    string
+	ownerRef     *metav1.OwnerReference
+	reloadCh     <-chan struct{}
+	elected      <-chan struct{} // closed when this instance wins leader election
 
-	mu    sync.Mutex
-	ready bool
+	mu          sync.Mutex
+	lastSuccess time.Time
 }
 
 // NewReconciler creates a Reconciler with the given dependencies.
+// ownerRef may be nil when the owner Deployment cannot be resolved (e.g. dev mode).
+// reloadCh may be nil if config hot-reload triggering is not needed.
+// elected is closed when the manager wins leader election; pass a closed channel
+// to disable leader-awareness (e.g. when leader election is off).
 func NewReconciler(
 	cli client.Client,
 	res *resolver.Resolver,
 	cfg *atomic.Pointer[config.Config],
 	log *slog.Logger,
 	instanceName string,
+	namespace string,
+	ownerRef *metav1.OwnerReference,
+	reloadCh <-chan struct{},
+	elected <-chan struct{},
 ) *Reconciler {
 	return &Reconciler{
 		client:       cli,
@@ -63,6 +86,10 @@ func NewReconciler(
 		config:       cfg,
 		log:          log,
 		instanceName: instanceName,
+		namespace:    namespace,
+		ownerRef:     ownerRef,
+		reloadCh:     reloadCh,
+		elected:      elected,
 	}
 }
 
@@ -80,6 +107,8 @@ func newTriggerRequest() reconcile.Request {
 // EndpointSlice and Node resources. Filtering by service name is done
 // dynamically in Reconcile via the List call, so config hot-reload of
 // source.serviceName takes effect without restart.
+// If a reload channel was provided via NewReconciler, the controller also
+// triggers reconciliation when the config watcher signals a successful reload.
 func (rec *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	nodeHandler := handler.EnqueueRequestsFromMapFunc(
 		func(_ context.Context, _ client.Object) []reconcile.Request {
@@ -87,10 +116,38 @@ func (rec *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 		},
 	)
 
-	err := ctrl.NewControllerManagedBy(mgr).
+	builder := ctrl.NewControllerManagedBy(mgr).
 		For(&discoveryv1.EndpointSlice{}).
-		Watches(&corev1.Node{}, nodeHandler).
-		Complete(rec)
+		Watches(&corev1.Node{}, nodeHandler)
+
+	if rec.reloadCh != nil {
+		eventCh := make(chan event.GenericEvent, 1)
+
+		// This goroutine bridges reloadCh (struct{}) to eventCh (GenericEvent).
+		// It lives for the entire process lifetime because reloadCh is
+		// intentionally never closed (see watcher.go Close comment).
+		// Only one instance exists per controller, so the leak is harmless.
+		go func() {
+			for range rec.reloadCh {
+				select {
+				case eventCh <- event.GenericEvent{Object: &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: "config-reload"},
+				}}:
+				default:
+				}
+			}
+		}()
+
+		reloadHandler := handler.EnqueueRequestsFromMapFunc(
+			func(_ context.Context, _ client.Object) []reconcile.Request {
+				return []reconcile.Request{newTriggerRequest()}
+			},
+		)
+
+		builder = builder.WatchesRawSource(source.Channel(eventCh, reloadHandler))
+	}
+
+	err := builder.Complete(rec)
 
 	return errors.Wrap(err, "setting up controller")
 }
@@ -98,6 +155,8 @@ func (rec *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 // Reconcile resolves addresses from EndpointSlices and patches headless
 // Service objects for each configured output.
 func (rec *Reconciler) Reconcile(ctx context.Context, _ ctrl.Request) (ctrl.Result, error) {
+	start := time.Now()
+
 	cfg := rec.config.Load()
 
 	sliceList, err := rec.listEndpointSlices(ctx, cfg)
@@ -114,24 +173,54 @@ func (rec *Reconciler) Reconcile(ctx context.Context, _ ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, outputErr
 	}
 
+	reconcileDuration.Observe(time.Since(start).Seconds())
 	reconcileTotal.WithLabelValues("success").Inc()
 	lastReconcileTimestamp.Set(float64(time.Now().Unix()))
 	rec.markReady()
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: requeueInterval}, nil
 }
 
-// ReadyzCheck reports whether the controller has completed at least one
-// successful reconciliation.
+// ReadyzCheck reports whether the controller is healthy.
+//
+// Non-leader pods (waiting for leader election) always report healthy because
+// they are valid standby replicas that the PDB must count as available.
+//
+// Leader pods must complete at least one reconciliation and must not become
+// stale (no successful reconciliation within stalenessThreshold).
 func (rec *Reconciler) ReadyzCheck(_ *http.Request) error {
+	if !rec.isElected() {
+		return nil
+	}
+
 	rec.mu.Lock()
 	defer rec.mu.Unlock()
 
-	if !rec.ready {
+	if rec.lastSuccess.IsZero() {
 		return errNotReconciled
 	}
 
+	since := time.Since(rec.lastSuccess)
+	if since > stalenessThreshold {
+		return errors.Newf("last successful reconciliation was %s ago (stale threshold: %s)",
+			since.Round(time.Second), stalenessThreshold)
+	}
+
 	return nil
+}
+
+// isElected reports whether this instance has won leader election.
+func (rec *Reconciler) isElected() bool {
+	if rec.elected == nil {
+		return true
+	}
+
+	select {
+	case <-rec.elected:
+		return true
+	default:
+		return false
+	}
 }
 
 // listEndpointSlices fetches all EndpointSlices matching the source config.
@@ -223,7 +312,7 @@ func (rec *Reconciler) buildService(
 	output *config.OutputConfig,
 	addresses []string,
 ) *applycorev1.ServiceApplyConfiguration {
-	return applycorev1.Service(output.ServiceName, output.ServiceNamespace).
+	svc := applycorev1.Service(output.ServiceName, rec.namespace).
 		WithLabels(map[string]string{
 			managedByLabel: managedByValue,
 			instanceLabel:  rec.instanceName,
@@ -231,17 +320,24 @@ func (rec *Reconciler) buildService(
 		WithAnnotations(map[string]string{
 			output.AnnotationPrefix + "hostname": strings.Join(output.Hostnames, ","),
 			output.AnnotationPrefix + "target":   strings.Join(addresses, ","),
-			output.AnnotationPrefix + "ttl":      strconv.Itoa(output.RecordTTL),
-		}).
-		WithSpec(applycorev1.ServiceSpec().
-			WithType(corev1.ServiceTypeClusterIP).
-			WithClusterIP(corev1.ClusterIPNone),
-		)
-}
+			output.AnnotationPrefix + "ttl":      strconv.Itoa(*output.RecordTTL),
+		})
 
-// serviceKey returns a unique key for a service as "namespace/name".
-func serviceKey(namespace, name string) string {
-	return namespace + "/" + name
+	if rec.ownerRef != nil {
+		svc = svc.WithOwnerReferences(
+			applymetav1.OwnerReference().
+				WithAPIVersion(rec.ownerRef.APIVersion).
+				WithKind(rec.ownerRef.Kind).
+				WithName(rec.ownerRef.Name).
+				WithUID(rec.ownerRef.UID).
+				WithBlockOwnerDeletion(true),
+		)
+	}
+
+	return svc.WithSpec(applycorev1.ServiceSpec().
+		WithType(corev1.ServiceTypeClusterIP).
+		WithClusterIP(corev1.ClusterIPNone),
+	)
 }
 
 // cleanupStaleServices removes Services with the managed-by label that no
@@ -249,13 +345,13 @@ func serviceKey(namespace, name string) string {
 func (rec *Reconciler) cleanupStaleServices(ctx context.Context, cfg *config.Config) error {
 	expected := make(map[string]struct{}, len(cfg.Outputs))
 	for idx := range cfg.Outputs {
-		key := serviceKey(cfg.Outputs[idx].ServiceNamespace, cfg.Outputs[idx].ServiceName)
-		expected[key] = struct{}{}
+		expected[cfg.Outputs[idx].ServiceName] = struct{}{}
 	}
 
 	var svcList corev1.ServiceList
 
 	err := rec.client.List(ctx, &svcList,
+		client.InNamespace(rec.namespace),
 		client.MatchingLabels{
 			managedByLabel: managedByValue,
 			instanceLabel:  rec.instanceName,
@@ -269,9 +365,8 @@ func (rec *Reconciler) cleanupStaleServices(ctx context.Context, cfg *config.Con
 
 	for idx := range svcList.Items {
 		svc := &svcList.Items[idx]
-		key := serviceKey(svc.Namespace, svc.Name)
 
-		if _, ok := expected[key]; ok {
+		if _, ok := expected[svc.Name]; ok {
 			continue
 		}
 
@@ -294,10 +389,10 @@ func (rec *Reconciler) cleanupStaleServices(ctx context.Context, cfg *config.Con
 	return errors.Join(errs...)
 }
 
-// markReady records that at least one reconciliation has succeeded.
+// markReady records that a reconciliation has succeeded.
 func (rec *Reconciler) markReady() {
 	rec.mu.Lock()
 	defer rec.mu.Unlock()
 
-	rec.ready = true
+	rec.lastSuccess = time.Now()
 }
