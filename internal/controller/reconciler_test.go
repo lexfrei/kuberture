@@ -188,7 +188,7 @@ func buildTestReconciler(
 	res := resolver.NewResolver(cli, slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	log := slog.Default()
 
-	return NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, nil, nil)
+	return NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, nil, nil, nil)
 }
 
 func TestReconcile(t *testing.T) {
@@ -667,7 +667,7 @@ func TestReconcile_ErrorListingEndpointSlices(t *testing.T) {
 	res := resolver.NewResolver(cli, slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	log := slog.Default()
 
-	rec := NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, nil, nil)
+	rec := NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, nil, nil, nil)
 
 	_, err := rec.Reconcile(context.Background(), ctrl.Request{})
 	if err == nil {
@@ -738,6 +738,51 @@ func TestReadyzCheck(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 		})
+	}
+}
+
+// TestReadyzCheck_NonLeaderPodIsReady verifies that a pod that has NOT won
+// leader election reports healthy via readyz. Non-leader pods never run
+// Reconcile, so lastSuccess stays zero — but they are valid standby
+// replicas and must be counted as "available" by the PDB.
+func TestReadyzCheck_NonLeaderPodIsReady(t *testing.T) {
+	output := defaultOutput()
+	cfgPtr := newTestConfig([]config.OutputConfig{output})
+
+	// Reconciler that never runs Reconcile (simulates non-leader pod).
+	rec := buildTestReconciler(t, nil, cfgPtr, &[]appliedService{}, nil)
+
+	// Simulate non-leader: elected channel is open (not closed).
+	rec.elected = make(chan struct{})
+
+	// Non-leader pod should be ready even without any reconciliation.
+	err := rec.ReadyzCheck(&http.Request{})
+	if err != nil {
+		t.Fatalf("non-leader pod should be ready, got: %v", err)
+	}
+}
+
+// TestReadyzCheck_ElectedLeaderBehavesNormally verifies that an elected leader
+// (closed elected channel) still requires successful reconciliation.
+func TestReadyzCheck_ElectedLeaderBehavesNormally(t *testing.T) {
+	output := defaultOutput()
+	cfgPtr := newTestConfig([]config.OutputConfig{output})
+
+	rec := buildTestReconciler(t, nil, cfgPtr, &[]appliedService{}, nil)
+
+	// Simulate leader: elected channel is closed.
+	ch := make(chan struct{})
+	close(ch)
+	rec.elected = ch
+
+	// Leader that hasn't reconciled should be unhealthy.
+	err := rec.ReadyzCheck(&http.Request{})
+	if err == nil {
+		t.Fatal("elected leader without reconciliation should return error")
+	}
+
+	if !strings.Contains(err.Error(), "initial reconciliation") {
+		t.Errorf("error = %q, want it to contain %q", err.Error(), "initial reconciliation")
 	}
 }
 
@@ -1018,7 +1063,7 @@ func TestNewReconciler(t *testing.T) {
 
 	cfgPtr := newTestConfig([]config.OutputConfig{defaultOutput()})
 
-	rec := NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, nil, nil)
+	rec := NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, nil, nil, nil)
 
 	if rec == nil {
 		t.Fatal("NewReconciler returned nil")
@@ -1071,7 +1116,7 @@ func buildTestReconcilerWithInterceptor(
 	res := resolver.NewResolver(cli, slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	log := slog.Default()
 
-	return NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, nil, nil)
+	return NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, nil, nil, nil)
 }
 
 func TestReconcile_PartialOutputFailure(t *testing.T) {
@@ -1930,7 +1975,7 @@ func TestNewReconciler_WithOwnerRef(t *testing.T) {
 		UID:        types.UID("test-uid-456"),
 	}
 
-	rec := NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, ownerRef, nil)
+	rec := NewReconciler(cli, res, cfgPtr, log, "test-instance", testSvcNamespace, ownerRef, nil, nil)
 
 	if rec.ownerRef != ownerRef {
 		t.Error("ownerRef not set correctly")
