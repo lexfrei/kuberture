@@ -97,7 +97,7 @@ jobs:
           cache: true
 
       - name: Install kind
-        uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3 # v1
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1
         with:
           install_only: true
 
