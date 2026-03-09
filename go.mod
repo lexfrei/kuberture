@@ -1,6 +1,6 @@
 module github.com/lexfrei/kuberture
 
-go 1.26.0
+go 1.26.1
 
 require (
 	github.com/cockroachdb/errors v1.12.0
@@ -8,10 +8,10 @@ require (
 	github.com/go-logr/logr v1.4.3
 	github.com/prometheus/client_golang v1.23.2
 	gopkg.in/yaml.v3 v3.0.1
-	k8s.io/api v0.35.1
-	k8s.io/apimachinery v0.35.1
-	k8s.io/client-go v0.35.1
-	sigs.k8s.io/controller-runtime v0.23.1
+	k8s.io/api v0.35.2
+	k8s.io/apimachinery v0.35.2
+	k8s.io/client-go v0.35.2
+	sigs.k8s.io/controller-runtime v0.23.3
 )
 
 require (
