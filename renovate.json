@@ -2,5 +2,38 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended"
+  ],
+  "postUpdateOptions": [
+    "gomodTidy"
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/(^|/)go\\.mod$/"
+      ],
+      "matchStrings": [
+        "(?m)^go\\s(?<currentValue>\\d+\\.\\d+\\.\\d+)$",
+        "(?m)^toolchain\\sgo(?<currentValue>\\d+\\.\\d+\\.\\d+)$"
+      ],
+      "depNameTemplate": "go",
+      "datasourceTemplate": "golang-version",
+      "versioningTemplate": "semver"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Track Go toolchain patch updates from go.mod/go toolchain directives",
+      "matchManagers": [
+        "regex"
+      ],
+      "matchDepNames": [
+        "go"
+      ],
+      "matchUpdateTypes": [
+        "patch"
+      ],
+      "groupName": "go-toolchain-patch"
+    }
   ]
 }
