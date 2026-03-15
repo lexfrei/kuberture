@@ -3,6 +3,8 @@
   "extends": [
     "config:recommended"
   ],
+  "platformAutomerge": true,
+  "automergeStrategy": "squash",
   "postUpdateOptions": [
     "gomodTidy"
   ],
@@ -24,16 +26,20 @@
   "packageRules": [
     {
       "description": "Track Go toolchain patch updates from go.mod/go toolchain directives",
-      "matchManagers": [
-        "regex"
-      ],
-      "matchDepNames": [
-        "go"
-      ],
-      "matchUpdateTypes": [
-        "patch"
-      ],
+      "matchManagers": ["regex"],
+      "matchDepNames": ["go"],
+      "matchUpdateTypes": ["patch"],
       "groupName": "go-toolchain-patch"
+    },
+    {
+      "description": "Automerge minor and patch updates",
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "automerge": true
+    },
+    {
+      "description": "Automerge all GitHub Actions updates including major",
+      "matchManagers": ["github-actions"],
+      "automerge": true
     }
   ]
 }
