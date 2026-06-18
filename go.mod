@@ -3,7 +3,7 @@ module github.com/lexfrei/kuberture
 go 1.26.4
 
 require (
-	github.com/cockroachdb/errors v1.13.0
+	github.com/cockroachdb/errors v1.14.0
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/go-logr/logr v1.4.3
 	github.com/prometheus/client_golang v1.23.2
