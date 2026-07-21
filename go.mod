@@ -5,7 +5,7 @@ go 1.26.5
 require (
 	github.com/cockroachdb/errors v1.14.0
 	github.com/fsnotify/fsnotify v1.10.1
-	github.com/go-logr/logr v1.4.3
+	github.com/go-logr/logr v1.4.4
 	github.com/prometheus/client_golang v1.23.2
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.36.2
