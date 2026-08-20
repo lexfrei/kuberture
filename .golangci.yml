@@ -140,6 +140,10 @@ linters:
           - revive
           - gochecknoglobals
           - noinlineerr
+          # Fixtures repeat addresses and hostnames on purpose; naming each one
+          # reads worse than the literal it replaces. Already excluded under
+          # test/ for the same reason.
+          - goconst
         path: _test\.go
       # Test utilities
       - linters:

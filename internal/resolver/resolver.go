@@ -12,10 +12,9 @@ import (
 	discoveryv1 "k8s.io/api/discovery/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-)
 
-// addressSourceEndpointSlice is the source that returns addresses directly.
-const addressSourceEndpointSlice = "endpointslice"
+	"github.com/lexfrei/kuberture/internal/config"
+)
 
 // Resolver resolves node addresses from EndpointSlice resources.
 type Resolver struct {
@@ -43,7 +42,7 @@ func (res *Resolver) ResolveAddresses(
 ) ([]string, error) {
 	infos := collectReadyAddresses(endpointSlices, addressType)
 
-	if addressSource == addressSourceEndpointSlice {
+	if addressSource == config.AddressSourceEndpointSlice {
 		return sortedUnique(extractAddresses(infos)), nil
 	}
 
@@ -220,11 +219,11 @@ func (res *Resolver) getNodeAddress(
 // findNodeAddress extracts a single address from a node based on the source.
 func findNodeAddress(node *corev1.Node, addressSource string) string {
 	switch addressSource {
-	case "node-internal":
+	case config.AddressSourceNodeInternal:
 		return findAddressByType(node.Status.Addresses, corev1.NodeInternalIP)
-	case "node-external":
+	case config.AddressSourceNodeExternal:
 		return findAddressByType(node.Status.Addresses, corev1.NodeExternalIP)
-	case "node-public":
+	case config.AddressSourceNodePublic:
 		return findPublicAddress(node.Status.Addresses)
 	default:
 		return ""
