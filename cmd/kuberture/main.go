@@ -26,7 +26,15 @@ import (
 	"github.com/lexfrei/kuberture/internal/resolver"
 )
 
-const defaultConfigPath = "/etc/kuberture/config.yaml"
+const (
+	defaultConfigPath = "/etc/kuberture/config.yaml"
+
+	// defaultNamespace is where the pod runs when POD_NAMESPACE is unset.
+	defaultNamespace = "default"
+
+	// kindReplicaSet is the owner kind a Deployment-managed pod carries.
+	kindReplicaSet = "ReplicaSet"
+)
 
 // version and revision are set at build time via ldflags.
 var (
@@ -64,7 +72,7 @@ func run() error {
 
 	podNamespace := os.Getenv("POD_NAMESPACE")
 	if podNamespace == "" {
-		podNamespace = "default"
+		podNamespace = defaultNamespace
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
@@ -212,7 +220,7 @@ func resolveOwnerDeployment(
 	var rsName string
 
 	for idx := range pod.OwnerReferences {
-		if pod.OwnerReferences[idx].Kind == "ReplicaSet" {
+		if pod.OwnerReferences[idx].Kind == kindReplicaSet {
 			rsName = pod.OwnerReferences[idx].Name
 
 			break

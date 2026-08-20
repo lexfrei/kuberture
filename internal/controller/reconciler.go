@@ -93,11 +93,14 @@ func NewReconciler(
 	}
 }
 
+// triggerRequestName is the fixed reconcile key Node events map onto.
+const triggerRequestName = "trigger"
+
 // newTriggerRequest returns a fixed reconcile key used when Node events fire.
 func newTriggerRequest() reconcile.Request {
 	return reconcile.Request{
 		NamespacedName: types.NamespacedName{
-			Name:      "trigger",
+			Name:      triggerRequestName,
 			Namespace: "default",
 		},
 	}
